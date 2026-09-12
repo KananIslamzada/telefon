@@ -184,7 +184,30 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
   overflow:hidden;padding:8px 15px 10px;min-height:86px;
   display:flex;align-items:center;justify-content:center;
 }
+.table{display:flex;flex-direction:column;align-items:center;gap:6px;margin:0 auto}
+.mainline{display:flex;align-items:center;gap:5px}
 .chain{display:flex;flex-direction:column;gap:5px;margin:0 auto}
+.armrows{display:flex;flex-direction:column;gap:5px;min-width:0}
+.arm{
+  display:flex;align-items:center;gap:8px;padding:5px 8px 5px 6px;border-radius:9px;
+  background:rgba(0,0,0,.2);border:1px solid rgba(223,168,60,.22);
+}
+.arm .tether{
+  font-size:10px;font-weight:700;color:var(--brass);opacity:.85;flex:0 0 auto;
+  text-transform:uppercase;letter-spacing:.07em;line-height:1.2;text-align:center;
+}
+.arm .tether b{display:block;font-size:13px}
+.tile.spin{
+  box-shadow:0 1px 0 rgba(255,255,255,.7) inset,0 -2px 4px rgba(120,100,60,.25) inset,
+             0 0 0 2px var(--brass),0 3px 8px rgba(0,0,0,.5);
+}
+.slot{
+  flex:0 0 auto;width:calc(var(--unit)*1.4);height:calc(var(--unit)*1.5);
+  border-radius:6px;border:2px dashed var(--brass);background:rgba(223,168,60,.16);
+  animation:pulse 1.5s ease-in-out infinite;
+}
+.slot:active{background:rgba(223,168,60,.34)}
+.picker.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .crow{display:flex;gap:3px;align-items:center;justify-content:flex-start}
 .crow.rev{flex-direction:row-reverse}
 .empty-felt{width:100%;text-align:center;color:rgba(240,231,212,.28);font-size:13.5px;padding:26px 20px}
@@ -206,11 +229,11 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 .half{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:11%;gap:4%}
 .pip{border-radius:50%;background:radial-gradient(circle at 32% 30%,#4A433A,var(--pip));box-shadow:0 .5px .5px rgba(255,255,255,.35)}
 .pip.p6{background:radial-gradient(circle at 32% 30%,#7E2B2A,#8E1D1C)}
-/* board tiles — --unit is set by fitBoard() so the whole chain stays visible */
-.chain{--unit:34px}
-.chain .tile{--w:var(--unit);--h:calc(var(--unit)*2);border-radius:5px}
-.chain .tile.h{--w:calc(var(--unit)*2);--h:var(--unit)}
-.chain .tile.is-new{animation:land .42s cubic-bezier(.18,.85,.3,1.25)}
+/* board tiles — --unit is set per render so the whole layout stays visible */
+.table{--unit:34px}
+.table .tile{--w:var(--unit);--h:calc(var(--unit)*2);border-radius:5px}
+.table .tile.h{--w:calc(var(--unit)*2);--h:var(--unit)}
+.table .tile.is-new{animation:land .42s cubic-bezier(.18,.85,.3,1.25)}
 @keyframes land{
   0%{transform:translateY(-38px) rotate(-11deg) scale(1.14);opacity:0}
   55%{transform:translateY(3px) rotate(2deg) scale(1);opacity:1}
@@ -411,47 +434,87 @@ function sideMembers(g, s){
   return g.players.filter((p,i)=>sideOf(g,i)===s);
 }
 
-function endValues(board){
-  if(!board.length) return null;
-  if(board.length===1){
-    const t = board[0].t;
-    return { l:t[0], r:t[1], total: isDouble(t) ? t[0]*2 : t[0]+t[1] };
+/* ---------- the layout ----------
+   line : the main row, chain order, t[0] faces left / t[1] faces right
+   sp   : index in `line` of the spinner (the first double played, and only that one)
+   a, b : the two branch arms off the spinner's long sides; t[0] faces the spinner
+   Arms only open once both sides of the spinner are covered (pagat/All Fives). */
+function newBoard(){ return { line:[], a:[], b:[], sp:null }; }
+function bCount(b){ return b.line.length + b.a.length + b.b.length; }
+function armsOpen(b){ return b.sp!=null && b.sp>0 && b.sp < b.line.length-1; }
+function spinVal(b){ return b.sp!=null ? b.line[b.sp].t[0] : null; }
+
+/* every open end: what it matches, and what it contributes to the count */
+function endsInfo(b){
+  const L=b.line;
+  if(!L.length) return { total:0, list:[] };
+  if(L.length===1){
+    const x=L[0];
+    return {
+      total: x.d ? x.t[0]*2 : x.t[0]+x.t[1],
+      list: [{side:'l', match:x.t[0]}, {side:'r', match:x.t[1]}],
+      lone: true
+    };
   }
-  const f=board[0], k=board[board.length-1];
-  const lv = f.d ? f.t[0]*2 : f.t[0];
-  const rv = k.d ? k.t[1]*2 : k.t[1];
-  return { l:f.t[0], r:k.t[1], total: lv+rv };
+  const f=L[0], k=L[L.length-1];
+  const list=[
+    { side:'l', match:f.t[0], val: f.d ? f.t[0]*2 : f.t[0] },
+    { side:'r', match:k.t[1], val: k.d ? k.t[1]*2 : k.t[1] }
+  ];
+  if(armsOpen(b)){
+    const n=spinVal(b);
+    for(const key of ['a','b']){
+      const arm=b[key];
+      if(arm.length){
+        const z=arm[arm.length-1];
+        list.push({ side:key, match:z.t[1], val: z.d ? z.t[1]*2 : z.t[1] });
+      } else {
+        // playable, but a bare spinner side contributes nothing once both its sides are covered
+        list.push({ side:key, match:n, val:0, empty:true });
+      }
+    }
+  }
+  return { total: list.reduce((s,e)=>s+(e.val||0),0), list };
 }
-function openEnds(board){
-  if(!board.length) return null;
-  return { l:board[0].t[0], r:board[board.length-1].t[1] };
+
+function fitSides(b, t){
+  const res={};
+  if(!b.line.length){ res.r=true; return res; }
+  for(const e of endsInfo(b).list) if(t[0]===e.match || t[1]===e.match) res[e.side]=true;
+  return res;
 }
-function fits(board, t){
-  if(!board.length) return {l:true,r:true};
-  const e = openEnds(board);
-  return { l: t[0]===e.l || t[1]===e.l, r: t[0]===e.r || t[1]===e.r };
+function canPlayAny(b, hand){
+  if(!b.line.length) return hand.length>0;
+  return hand.some(t=>Object.keys(fitSides(b,t)).length>0);
 }
-function canPlayAny(board, hand){
-  if(!board.length) return hand.length>0;
-  return hand.some(t=>{ const f=fits(board,t); return f.l||f.r; });
-}
-/* count that would result from placing tile t on `side` */
-function previewCount(board, t, side){
-  const b = board.map(x=>({t:x.t.slice(),d:x.d}));
-  place(b, t, side);
-  return endValues(b).total;
-}
-function place(board, t, side){
+
+function place(b, t, side){
   const d = isDouble(t);
-  if(!board.length){ board.push({t:t.slice(), d}); return; }
-  const e = openEnds(board);
-  if(side==='l'){
-    const outer = (t[1]===e.l) ? t[0] : t[1];
-    board.unshift({ t:[outer, e.l], d });
-  }else{
-    const outer = (t[0]===e.r) ? t[1] : t[0];
-    board.push({ t:[e.r, outer], d });
+  if(!b.line.length){
+    b.line.push({t:t.slice(), d});
+    if(d) b.sp=0;
+    return;
   }
+  const e = endsInfo(b).list.find(x=>x.side===side);
+  if(!e) return;
+  const m = e.match;
+  const outer = (t[0]===m) ? t[1] : t[0];
+  if(side==='l'){
+    b.line.unshift({t:[outer, m], d});
+    if(b.sp!=null) b.sp++;          // the spinner shifted one place along
+    else if(d) b.sp=0;              // first double played -> this is the spinner
+  } else if(side==='r'){
+    b.line.push({t:[m, outer], d});
+    if(b.sp==null && d) b.sp=b.line.length-1;
+  } else {
+    b[side].push({t:[m, outer], d});
+  }
+}
+
+function previewCount(b, t, side){
+  const c = JSON.parse(JSON.stringify(b));
+  place(c, t, side);
+  return endsInfo(c).total;
 }
 
 function newGame(code, host){
@@ -485,7 +548,7 @@ function startRound(g){
 
   g.roundNo++;
   g.round = {
-    hands, bone, board:[], turn:lead, lead, passes:0,
+    hands, bone, board:newBoard(), turn:lead, lead, passes:0,
     gained:new Array(sideCount(g)).fill(0), log:[], drew:0
   };
   g.phase='playing';
@@ -501,10 +564,10 @@ function award(g, side, pts, why){
 function doPlay(g, seat, tileIdx, side){
   const r=g.round, pid=g.players[seat].id, hand=r.hands[pid];
   const t = hand[tileIdx];
-  place(r.board, t, r.board.length?side:'r');
+  place(r.board, t, r.board.line.length ? side : 'r');
   hand.splice(tileIdx,1);
   r.passes=0; r.drew=0;
-  const cnt = endValues(r.board).total;
+  const cnt = endsInfo(r.board).total;
   let got=0;
   if(cnt>0 && cnt%5===0){ got=cnt; award(g, sideOf(g,seat), cnt, 'count'); }
   g.lastAct={type:'play', seat, tile:t, side, count:cnt, got};
@@ -624,8 +687,8 @@ function applyAction(pid, msg){        // runs on the host only
   const hand = G.round.hands[G.players[seat].id];
   if(msg.type==='play'){
     const t = hand[msg.i]; if(!t) return;
-    const f = fits(G.round.board, t);
-    if(G.round.board.length && !((msg.side==='l'&&f.l)||(msg.side==='r'&&f.r))) return;
+    const f = fitSides(G.round.board, t);
+    if(G.round.board.line.length && !f[msg.side]) return;
     doPlay(G, seat, msg.i, msg.side);
   } else if(msg.type==='draw'){
     if(!G.round.bone.length || canPlayAny(G.round.board,hand)) return;
@@ -760,9 +823,9 @@ function guestRetry(code){
 }
 
 function onRemoteState(g){
-  const prev = G && G.round ? G.round.board.length : 0;
+  const prev = G && G.round ? bCount(G.round.board) : 0;
   G = g;
-  if(!G.round || G.round.board.length < prev) UI.animUpTo = G.round ? G.round.board.length : 0;
+  if(!G.round || bCount(G.round.board) < prev) UI.animUpTo = G.round ? bCount(G.round.board) : 0;
   UI.sel = null;
   if(NET.status==='reconnecting'){ NET.status='ready'; clearTimeout(RETRY); }
   render();
@@ -850,13 +913,28 @@ function splitRows(board, u, gap, W){
   return rows;
 }
 
-/* largest tile size that keeps the whole chain inside a sensible number of rows */
-function layoutChain(board){
+/* one size for the whole table: main line plus both branches, nothing clipped.
+   `res` reserves room for the dashed drop slots that appear while a tile is held. */
+function layoutTable(b, res){
   const W=laneWidth(), land=isLandscape(), gap=3;
-  const maxRows = land ? 2 : 4, minU = 20, maxU = land ? 30 : 34;
-  let u=maxU, rows=splitRows(board,u,gap,W);
-  while(rows.length > maxRows && u > minU){ u -= 1; rows=splitRows(board,u,gap,W); }
-  return {u, rows};
+  const maxRows = land ? 3 : 6, minU = 20, maxU = land ? 30 : 34;
+  const TETHER = 54;                       // branch label + panel padding
+  let u = maxU, plan;
+  for(;;){
+    const slot = u*1.4 + gap;
+    const mainW = W - (res.l?slot:0) - (res.r?slot:0);
+    const armW  = k => W - TETHER - (res[k]?slot:0);
+    plan = {
+      u,
+      lineRows: splitRows(b.line, u, gap, mainW),
+      aRows: b.a.length ? splitRows(b.a, u, gap, armW('a')) : [],
+      bRows: b.b.length ? splitRows(b.b, u, gap, armW('b')) : []
+    };
+    const total = plan.lineRows.length + plan.aRows.length + plan.bRows.length;
+    if(total <= maxRows || u <= minU) break;
+    u -= 1;
+  }
+  return plan;
 }
 
 /* ============================================================
@@ -932,8 +1010,11 @@ function homeHTML(){
     <div class="rules" style="margin-top:8px">
       <ul>
         <li>Everyone gets 7 tiles. With 4 players the boneyard is empty — no drawing.</li>
-        <li>After every tile, add the two open ends. If the total is <b>5 or a multiple of 5</b>, that total goes to your side.</li>
+        <li>After every tile, add up the open ends. If the total is <b>5 or a multiple of 5</b>, that total goes to your side.</li>
         <li>A double sits crosswise and counts <b>both halves</b>. A 4–4 on the end is worth 8.</li>
+        <li>The <b>first double played is the spinner</b>. Once both its sides are covered, two more branches open off it and the layout can have four ends at once.</li>
+        <li>While only one side of the spinner is covered it still counts both halves. Once both sides are covered it counts nothing until a branch is actually started.</li>
+        <li>Later doubles are ordinary tiles — only the first one branches.</li>
         <li>Go out first and your side takes the pips left in opponents' hands, rounded to the nearest 5.</li>
         <li>If the table locks, the side with fewer pips in hand takes the difference the same way.</li>
         <li>Match ends at the target, and only once one side leads by 10 or more.</li>
@@ -1098,7 +1179,7 @@ function mySeat(){
 }
 function gameHTML(){
   const r=G.round, seat=mySeat(), myTurn = r && r.turn===seat;
-  const ev = endValues(r.board);
+  const ev = endsInfo(r.board);
   const hand = r.hands[G.players[seat].id] || [];
   const ns=sideCount(G);
 
@@ -1118,47 +1199,75 @@ function gameHTML(){
       <div class="c">${on.length&&on[i]===false?'away':r.hands[p.id].length+' tiles'}</div>
     </div>`).join('');
 
-  /* chain — wraps into rows that alternate direction, like tiles running out of table */
-  let chain;
-  if(r.board.length){
-    const {u, rows} = layoutChain(r.board);
-    const grew = r.board.length > UI.animUpTo;
-    const newIdx = grew && G.lastAct && G.lastAct.type==='play'
-      ? (G.lastAct.side==='l' ? 0 : r.board.length-1) : -1;
-    let k=0, html='';
-    rows.forEach((row, ri)=>{
+  /* the table: main line down the middle, spinner branches above and below it */
+  const SIDE_LABEL = {l:'◀ left', r:'right ▶', a:'▲ branch', b:'▼ branch'};
+  const selTile = (myTurn && UI.sel!=null) ? hand[UI.sel] : null;
+  const selFits = selTile ? fitSides(r.board, selTile) : {};
+  const grew = bCount(r.board) > UI.animUpTo;
+  const newSide = grew && G.lastAct && G.lastAct.type==='play' ? G.lastAct.side : null;
+
+  /* rows alternate direction and mirror their pips, so the chain always reads through */
+  function rowsHTML(rows, markNew){
+    let k=0;
+    return rows.map((row, ri)=>{
       const rev = ri%2===1;
-      html += `<div class="crow ${rev?'rev':''}">` +
-        row.map(b=>tileHTML(b.t, !b.d, (k++)===newIdx?'is-new':'', rev)).join('') +
-      `</div>`;
-    });
-    chain = `<div class="chain" style="--unit:${u}px">${html}</div>`;
+      return `<div class="crow ${rev?'rev':''}">` +
+        row.map(b=>tileHTML(b.t, !b.d, markNew(k++), rev)).join('') + `</div>`;
+    }).join('');
+  }
+
+  function armBlock(key, plan){
+    const arm = r.board[key], rows = key==='a' ? plan.aRows : plan.bRows;
+    const targetable = !!selFits[key];
+    if(!arm.length && !targetable) return '';
+    const body = rowsHTML(rows, i => (newSide===key && i===arm.length-1) ? 'is-new' : '');
+    const ghost = targetable ? `<button class="slot" data-side="${key}"></button>` : '';
+    return `<div class="arm">
+      <span class="tether">branch<b>${spinVal(r.board)}</b></span>
+      <div class="armrows">${body}${ghost?`<div class="crow">${ghost}</div>`:''}</div></div>`;
+  }
+
+  let chain;
+  if(r.board.line.length){
+    const plan = layoutTable(r.board, selFits);
+    const last = r.board.line.length-1;
+    const body = rowsHTML(plan.lineRows, i =>
+      `${(newSide==='l'&&i===0)||(newSide==='r'&&i===last) ? 'is-new':''} ${i===r.board.sp?'spin':''}`);
+    const lg = selFits.l ? `<button class="slot" data-side="l"></button>` : '';
+    const rg = selFits.r ? `<button class="slot" data-side="r"></button>` : '';
+    chain = `<div class="table" style="--unit:${plan.u}px">
+      ${armBlock('a', plan)}
+      <div class="mainline">${lg}<div class="chain">${body}</div>${rg}</div>
+      ${armBlock('b', plan)}
+    </div>`;
   } else {
     chain = `<div class="empty-felt">${esc(G.players[r.turn].name)} opens the round</div>`;
   }
 
-  const scoring = ev && ev.total%5===0 && ev.total>0;
-  const endsBar = ev ? `
+  /* live count across two, three or four open ends */
+  const scoring = ev.total%5===0 && ev.total>0;
+  const counted = ev.lone ? [{val:ev.total}] : ev.list.filter(e=>!e.empty);
+  const endsBar = ev.list.length ? `
     <div class="ends ${scoring?'is-score':''}">
-      <span class="v">${ev.l}</span><span>+</span><span class="v">${ev.r}</span><span>=</span>
-      <span class="tot">${ev.total}${scoring?' ✓':''}</span>
+      ${counted.map(e=>`<span class="v">${e.val}</span>`).join('<span>+</span>')}
+      <span>=</span><span class="tot">${ev.total}${scoring?' ✓':''}</span>
     </div>` : '';
 
-  /* end picker */
+  /* end picker — one button per open end this tile actually fits */
   let picker='';
-  if(myTurn && UI.sel!=null && hand[UI.sel]){
-    const t=hand[UI.sel], f=fits(r.board,t);
-    if(r.board.length){
-      const cl=previewCount(r.board,t,'l'), cr=previewCount(r.board,t,'r');
-      picker=`<div class="picker">
-        <button class="pk ${f.l&&cl%5===0&&cl>0?'gain':''}" data-side="l" ${f.l?'':'disabled'}>
-          <div class="lb">◀ left end</div><div class="vl">${f.l?(cl+(cl%5===0&&cl>0?' · +'+cl:'')):'—'}</div></button>
-        <button class="pk ${f.r&&cr%5===0&&cr>0?'gain':''}" data-side="r" ${f.r?'':'disabled'}>
-          <div class="lb">right end ▶</div><div class="vl">${f.r?(cr+(cr%5===0&&cr>0?' · +'+cr:'')):'—'}</div></button>
-      </div>`;
-    }else{
-      const c=isDouble(t)?t[0]*2:pips(t);
-      picker=`<div class="picker"><button class="pk ${c%5===0&&c>0?'gain':''}" data-side="r">
+  if(selTile){
+    if(r.board.line.length){
+      const open = ev.list.filter(e=>selFits[e.side]);
+      picker = `<div class="picker ${open.length>2?'grid':''}">` + open.map(e=>{
+        const c = previewCount(r.board, selTile, e.side);
+        const gain = c%5===0 && c>0;
+        return `<button class="pk ${gain?'gain':''}" data-side="${e.side}">
+          <div class="lb">${SIDE_LABEL[e.side]} · on ${e.match}</div>
+          <div class="vl">${c}${gain?' · +'+c:''}</div></button>`;
+      }).join('') + `</div>`;
+    } else {
+      const c = isDouble(selTile) ? selTile[0]*2 : pips(selTile);
+      picker = `<div class="picker"><button class="pk ${c%5===0&&c>0?'gain':''}" data-side="r">
         <div class="lb">open the round with this</div><div class="vl">${c}${c%5===0&&c>0?' · +'+c:''}</div></button></div>`;
     }
   }
@@ -1167,7 +1276,7 @@ function gameHTML(){
   const canAny = canPlayAny(r.board, hand);
   let bar='';
   if(myTurn){
-    if(canAny) bar=`<div class="turnbar mine"><span class="lamp on"></span><div class="msg">Your move${LOCAL?' — '+esc(G.players[seat].name):''}<small>Tap a tile, then pick an end</small></div></div>`;
+    if(canAny) bar=`<div class="turnbar mine"><span class="lamp on"></span><div class="msg">Your move${LOCAL?' — '+esc(G.players[seat].name):''}<small>${armsOpen(r.board)?'Four ends are open — pick one':'Tap a tile, then pick an end'}</small></div></div>`;
     else if(r.bone.length) bar=`<div class="turnbar mine"><span class="lamp on"></span><div class="msg">Nothing fits<small>${r.bone.length} in the boneyard</small></div><button class="btn" id="draw">Draw</button></div>`;
     else bar=`<div class="turnbar mine"><span class="lamp on"></span><div class="msg">Nothing fits, boneyard empty</div><button class="btn" id="pass">Pass</button></div>`;
   }else{
@@ -1177,7 +1286,7 @@ function gameHTML(){
 
   /* hand */
   const handHTML = hand.map((t,i)=>{
-    const f=fits(r.board,t), ok=myTurn && (f.l||f.r);
+    const ok = myTurn && Object.keys(fitSides(r.board,t)).length>0;
     return tileHTML(t,false,`${ok?'playable':''} ${myTurn&&!ok?'dead':''} ${UI.sel===i?'sel':''}`).replace('<div class="tile','<div data-i="'+i+'" class="tile');
   }).join('');
 
@@ -1271,7 +1380,7 @@ function fitBoard(){
 
 function wireGame(){
   fitBoard();
-  UI.animUpTo = G.round.board.length;
+  UI.animUpTo = bCount(G.round.board);
 
   const seat=mySeat(), myTurn=G.round.turn===seat && G.phase==='playing';
 
@@ -1279,15 +1388,16 @@ function wireGame(){
     el.onclick=()=>{
       const i=+el.dataset.i;
       if(!myTurn){ toast('Not your turn yet'); return; }
-      const t=G.round.hands[G.players[seat].id][i], f=fits(G.round.board,t);
-      if(!f.l && !f.r){ el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),360); return; }
+      const t=G.round.hands[G.players[seat].id][i], f=fitSides(G.round.board,t);
+      const open=Object.keys(f);
+      if(!open.length){ el.classList.add('shake'); setTimeout(()=>el.classList.remove('shake'),360); return; }
       if(UI.sel===i){ UI.sel=null; render(); return; }
       UI.sel=i;
-      if(G.round.board.length && f.l!==f.r){ commit(f.l?'l':'r'); return; }
+      if(G.round.board.line.length && open.length===1){ commit(open[0]); return; }
       render();
     };
   });
-  document.querySelectorAll('.pk').forEach(b=>{ if(!b.disabled) b.onclick=()=>commit(b.dataset.side); });
+  document.querySelectorAll('.pk, .slot').forEach(b=>{ if(!b.disabled) b.onclick=()=>commit(b.dataset.side); });
 
   const dr=document.getElementById('draw');
   if(dr) dr.onclick=()=>act({type:'draw'});
