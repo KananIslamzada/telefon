@@ -128,6 +128,7 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 .chip[aria-pressed="true"]{background:var(--brass);border-color:var(--brass);color:#241703}
 
 /* ---------- scoreboard ---------- */
+.topbar{display:flex;flex-direction:column}
 .board-head{display:flex;gap:8px;margin-bottom:10px}
 .sideplate{
   flex:1;padding:9px 11px;border-radius:9px;position:relative;overflow:hidden;
@@ -196,9 +197,10 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 .half{flex:1;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:11%;gap:4%}
 .pip{border-radius:50%;background:radial-gradient(circle at 32% 30%,#4A433A,var(--pip));box-shadow:0 .5px .5px rgba(255,255,255,.35)}
 .pip.p6{background:radial-gradient(circle at 32% 30%,#7E2B2A,#8E1D1C)}
-/* board tiles */
-.chain .tile{--w:34px;--h:68px;border-radius:5px}
-.chain .tile.h{--w:68px;--h:34px}
+/* board tiles — --unit is set by fitBoard() so the whole chain stays visible */
+.chain{--unit:34px}
+.chain .tile{--w:var(--unit);--h:calc(var(--unit)*2);border-radius:5px}
+.chain .tile.h{--w:calc(var(--unit)*2);--h:var(--unit)}
 .chain .tile.is-new{animation:land .42s cubic-bezier(.18,.85,.3,1.25)}
 @keyframes land{
   0%{transform:translateY(-38px) rotate(-11deg) scale(1.14);opacity:0}
@@ -209,7 +211,8 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 /* hand tiles */
 .hand{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding:4px 2px 10px}
 .hand::-webkit-scrollbar{display:none}
-.hand .tile{--w:44px;--h:88px;transition:transform .16s ease,box-shadow .16s ease,filter .16s}
+.hand{--hunit:44px}
+.hand .tile{--w:var(--hunit);--h:calc(var(--hunit)*2);transition:transform .16s ease,box-shadow .16s ease,filter .16s}
 .hand .tile.playable{cursor:pointer}
 .hand .tile.dead{filter:saturate(.35) brightness(.62)}
 .hand .tile.sel{transform:translateY(-12px);box-shadow:0 3px 6px rgba(0,0,0,.45),0 0 0 2px var(--brass),0 12px 22px rgba(0,0,0,.5)}
@@ -292,6 +295,31 @@ details summary{cursor:pointer;font-size:13px;color:var(--ink-45);padding:6px 0}
 details[open] summary{color:var(--ink-70)}
 
 .linkbtn{background:none;border:0;color:var(--ink-45);font-size:12.5px;text-decoration:underline;padding:6px 2px}
+
+/* ---------- landscape on a phone: wide board, everything else compressed ---------- */
+@media (orientation:landscape) and (max-height:560px){
+  #app{max-width:none;padding:6px 14px 10px}
+  .mast{padding:0 2px 6px;align-items:center}
+  .mast h1{font-size:20px}
+  .mast .sub{font-size:11px;line-height:1.3}
+  .topbar{flex-direction:row;gap:8px;align-items:stretch}
+  .board-head{width:44%;margin-bottom:8px}
+  .seatstrip{flex:1;margin-bottom:8px}
+  .sideplate{padding:6px 9px}
+  .sideplate .sc{font-size:20px}
+  .seatpip{padding:5px 4px}
+  .felt{padding:6px 0 4px}
+  .ends{padding:0 10px 5px;font-size:12px}
+  .ends .v{min-width:22px;height:22px;font-size:12.5px}
+  .ends .tot{height:25px;font-size:13.5px;padding:0 10px}
+  .lane{min-height:68px;padding:2px 12px 4px}
+  .hand{--hunit:36px;padding:2px 2px 6px}
+  .picker{padding:0 10px 6px}
+  .pk{padding:7px 6px}
+  .turnbar{padding:8px 11px;margin-bottom:6px}
+  .turnbar .msg{font-size:13px}
+  .turnbar .msg small{font-size:11px}
+}
 
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
@@ -1015,8 +1043,7 @@ function gameHTML(){
 
   return `
   ${mast(`${LOCAL?'hot-seat':'table '+G.code} · to ${G.target}<br>round ${G.roundNo}`)}
-  <div class="board-head">${heads}</div>
-  <div class="seatstrip">${strip}</div>
+  <div class="topbar"><div class="board-head">${heads}</div><div class="seatstrip">${strip}</div></div>
   <div class="felt">${endsBar}<div class="lane" id="lane">${chain}</div>${picker}</div>
   ${bar}
   <div class="hand" id="hand">${handHTML}</div>
@@ -1085,7 +1112,35 @@ function matchModal(){
   </div></div>`;
 }
 
+/* shrink the chain (and hand) just enough that every tile stays on screen */
+function fitBoard(){
+  const lane=document.getElementById('lane');
+  const b = G && G.round ? G.round.board : null;
+  if(lane && (!b || !b.length)) lane.style.minHeight='';
+  if(lane && b && b.length){
+    const chain=lane.querySelector('.chain');
+    if(chain){
+      const gap=3, doubles=b.filter(x=>x.d).length, flat=b.length-doubles;
+      const avail=lane.clientWidth-30;
+      const max = window.innerHeight<560 && window.innerWidth>window.innerHeight ? 30 : 34;
+      let u=(avail - gap*(b.length-1)) / (doubles + 2*flat);
+      u = Math.max(20, Math.min(max, u));          // 20px floor keeps pips readable
+      chain.style.setProperty('--unit', u.toFixed(1)+'px');
+      lane.style.minHeight = Math.round(u*2 + 14)+'px';   // no dead felt above and below
+    }
+  }
+  const hand=document.getElementById('hand');
+  if(hand && hand.children.length){
+    const n=hand.children.length, gap=7;
+    const avail=hand.clientWidth-4;
+    const max = window.innerHeight<560 && window.innerWidth>window.innerHeight ? 36 : 44;
+    let u=(avail - gap*(n-1)) / n;
+    hand.style.setProperty('--hunit', Math.max(26, Math.min(max, u)).toFixed(1)+'px');
+  }
+}
+
 function wireGame(){
+  fitBoard();
   const lane=document.getElementById('lane');
   if(lane && G.round.board.length){
     const side = G.lastAct && G.lastAct.type==='play' ? G.lastAct.side : 'r';
@@ -1149,6 +1204,10 @@ function afterRender(){
   const saved = lget('me');
   ME = saved && saved.id ? saved : { id:'u'+Math.random().toString(36).slice(2,10), name:'' };
   if(!saved) lset('me', ME);
+  let rt=null;
+  const refit=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ fitBoard(); }, 120); };
+  window.addEventListener('resize', refit);
+  window.addEventListener('orientationchange', refit);
   const q = new URLSearchParams(location.search).get('room');
   if(q) UI.code = q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
   render();
