@@ -148,6 +148,14 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 .seatpip .c{font-size:11px;color:var(--ink-45);margin-top:2px}
 .seatpip.is-turn{border-color:var(--brass);background:rgba(223,168,60,.14)}
 .seatpip.is-turn .n{color:var(--brass)}
+.seatpip.off{opacity:.4}
+.seatpip.off .c{color:#E9A0A0}
+.wire{
+  display:flex;align-items:center;gap:8px;padding:8px 12px;margin-bottom:9px;
+  border-radius:9px;background:rgba(233,160,160,.1);border:1px solid rgba(233,160,160,.35);
+  font-size:13px;font-weight:600;color:#F0C6C6;
+}
+.wire .lamp{background:#E9A0A0}
 
 /* ---------- felt / board ---------- */
 .felt{
@@ -173,11 +181,12 @@ input.field::placeholder{color:rgba(240,231,212,.3)}
 .ends.is-score .tot{background:var(--brass);border-color:var(--brass);color:#241703;animation:pulse 1.3s ease-in-out infinite}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(223,168,60,.45)}50%{box-shadow:0 0 0 8px rgba(223,168,60,0)}}
 .lane{
-  overflow-x:auto;overflow-y:hidden;scrollbar-width:none;
-  padding:6px 16px 10px;min-height:86px;display:flex;align-items:center;
+  overflow:hidden;padding:8px 15px 10px;min-height:86px;
+  display:flex;align-items:center;justify-content:center;
 }
-.lane::-webkit-scrollbar{display:none}
-.chain{display:flex;align-items:center;gap:3px;margin:0 auto}
+.chain{display:flex;flex-direction:column;gap:5px;margin:0 auto}
+.crow{display:flex;gap:3px;align-items:center;justify-content:flex-start}
+.crow.rev{flex-direction:row-reverse}
 .empty-felt{width:100%;text-align:center;color:rgba(240,231,212,.28);font-size:13.5px;padding:26px 20px}
 
 /* ---------- tiles ---------- */
@@ -312,7 +321,8 @@ details[open] summary{color:var(--ink-70)}
   .ends{padding:0 10px 5px;font-size:12px}
   .ends .v{min-width:22px;height:22px;font-size:12.5px}
   .ends .tot{height:25px;font-size:13.5px;padding:0 10px}
-  .lane{min-height:68px;padding:2px 12px 4px}
+  .lane{min-height:68px;padding:4px 12px 6px}
+  .chain{gap:4px}
   .hand{--hunit:36px;padding:2px 2px 6px}
   .picker{padding:0 10px 6px}
   .pk{padding:7px 6px}
@@ -576,6 +586,10 @@ function endRound(g, reason, winSeat){
 function sync(){                       // state changed on the host / hot-seat device
   if(!G) return;
   G.seq = (G.seq||0)+1;
+  if(NET.role==='host'){
+    G.online = G.players.map(p => p.id===ME.id || NET.conns.has(p.id));
+    lset('save', { code:G.code, at:Date.now(), g:G });
+  }
   render();
   if(NET.role==='host') broadcast();
 }
@@ -640,18 +654,46 @@ function explainPeerError(e){
 /* ---------- host ---------- */
 function newCode(){ let c=''; for(let i=0;i<4;i++) c+=ALPHA[rnd(ALPHA.length)]; return c; }
 
-function hostRoom(tries){
+setInterval(()=>{
+  if(NET.role!=='host' || !NET.peer || NET.peer.destroyed) return;
+  const want = NET.peer.disconnected ? 'reconnecting' : 'ready';
+  if(NET.status!==want){ NET.status=want; render(); }
+  if(NET.peer.disconnected) hostWake();
+}, 2500);
+
+function hostWake(){
+  const peer=NET.peer;
+  if(!peer || peer.destroyed || !peer.disconnected) return;
+  try{ peer.reconnect(); }catch(e){ noteErr('reconnect: '+e.message); }
+}
+
+function hostRoom(tries, fixedCode, restore){
   if(typeof Peer==='undefined'){ UI.err='Networking script did not load. Reload the page.'; NET.status=''; render(); return; }
-  const code = newCode();
+  const code = fixedCode || newCode();
   NET.role='host'; NET.status='connecting'; UI.err=''; render();
   const peer = new Peer(PREFIX+code, PEER_OPTS);
   NET.peer = peer;
 
-  peer.on('open', ()=>{ NET.status='ready'; G = newGame(code, ME); render(); });
+  peer.on('open', ()=>{
+    NET.status='ready';
+    SAVED = null;
+    if(!G) G = restore || newGame(code, ME);
+    if(restore){ G.host = ME.id; sync(); } else render();
+  });
+
+  peer.on('disconnected', ()=>{           // iOS froze the tab; the peer object is still good
+    if(NET.role!=='host') return;
+    NET.status='reconnecting'; render(); hostWake();
+  });
 
   peer.on('error', e=>{
     noteErr('peer: '+e.type+' — '+(e.message||''));
-    if(e.type==='unavailable-id' && tries<6){ try{peer.destroy()}catch(x){}; hostRoom(tries+1); return; }
+    if(e.type==='unavailable-id' && tries<8){
+      try{peer.destroy()}catch(x){}
+      // the old session can hold the code for a few seconds — wait it out before giving up on it
+      setTimeout(()=>hostRoom(tries+1, fixedCode, restore), fixedCode ? 2000 : 0);
+      return;
+    }
     try{ peer.destroy(); }catch(x){}          // otherwise PeerJS keeps retrying and spams errors
     NET.peer=null; NET.role='idle'; NET.status=''; G=null;
     UI.err = explainPeerError(e);
@@ -670,6 +712,7 @@ function hostRoom(tries){
         G.scores = new Array(sideCount(G)).fill(0);
       }
       NET.conns.set(pid, conn);
+      if(NET.status==='reconnecting') NET.status='ready';
       sync();
     });
     conn.on('data', m=>{ if(m && m.t==='act') applyAction(pid, m.a); });
@@ -685,12 +728,59 @@ function hostRoom(tries){
 }
 
 /* ---------- guest ---------- */
+let RETRY = null;
+
+function guestAttach(peer, code){
+  const conn = peer.connect(PREFIX+code, {reliable:true, metadata:{id:ME.id, name:ME.name}});
+  NET.host = conn;
+  conn.on('open', ()=>{ NET.joined=true; NET.status='ready'; clearTimeout(NET.joinTimer); render(); });
+  conn.on('data', m=>{
+    if(!m) return;
+    if(m.t==='state') onRemoteState(m.g);
+    else if(m.t==='deny'){ NET.joined=false; toast(m.why); leave(); }
+  });
+  conn.on('close', ()=>{
+    if(NET.role!=='guest' || !NET.joined) return;
+    NET.status='reconnecting'; render();   // keep the board on screen, keep trying
+    guestRetry(code);
+  });
+  conn.on('error', ()=>{});
+}
+
+function guestRetry(code){
+  clearTimeout(RETRY);
+  RETRY = setTimeout(()=>{
+    if(NET.role!=='guest') return;
+    const peer = NET.peer;
+    if(!peer || peer.destroyed){ guestRetry(code); return; }
+    if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
+    guestAttach(peer, code);
+    guestRetry(code);                      // keep a timer running until a connection opens
+  }, 3000);
+}
+
 function onRemoteState(g){
   const prev = G && G.round ? G.round.board.length : 0;
   G = g;
   if(!G.round || G.round.board.length < prev) UI.animUpTo = G.round ? G.round.board.length : 0;
   UI.sel = null;
+  if(NET.status==='reconnecting'){ NET.status='ready'; clearTimeout(RETRY); }
   render();
+}
+
+/* one place that wakes everything back up when the app comes to the front */
+function wake(){
+  if(document.hidden) return;
+  if(NET.role==='host') hostWake();
+  else if(NET.role==='guest' && NET.joined && NET.host && !NET.host.open){
+    clearTimeout(RETRY);
+    const peer=NET.peer;
+    if(peer && !peer.destroyed){
+      if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
+      guestAttach(peer, G ? G.code : UI.code);
+      guestRetry(G ? G.code : UI.code);
+    }
+  }
 }
 
 /* ---------- sound ---------- */
@@ -733,8 +823,40 @@ function half(v){
   for(let i=1;i<=9;i++) s += on.includes(i) ? `<i class="${cls}"></i>` : '<i></i>';
   return s+'</div>';
 }
-function tileHTML(t, horizontal, extra){
-  return `<div class="tile ${horizontal?'h':''} ${extra||''}">${half(t[0])}${half(t[1])}</div>`;
+function tileHTML(t, horizontal, extra, flip){
+  const a = flip ? t[1] : t[0], b = flip ? t[0] : t[1];
+  return `<div class="tile ${horizontal?'h':''} ${extra||''}">${half(a)}${half(b)}</div>`;
+}
+
+/* ---------- chain layout: wrap at the edge and run back the other way ---------- */
+function isLandscape(){ return window.innerWidth > window.innerHeight && window.innerHeight < 560; }
+
+function laneWidth(){
+  const el = document.getElementById('lane');       // the previous render is still mounted here
+  if(el && el.clientWidth > 60) return el.clientWidth - 30;
+  const land = isLandscape();
+  return Math.min(window.innerWidth, land ? window.innerWidth : 520) - (land?28:24) - 30;
+}
+
+function splitRows(board, u, gap, W){
+  const rows=[]; let cur=[], w=0;
+  for(const t of board){
+    const tw = t.d ? u : 2*u;
+    if(cur.length && w + gap + tw > W){ rows.push(cur); cur=[]; w=0; }
+    w += (cur.length ? gap : 0) + tw;
+    cur.push(t);
+  }
+  if(cur.length) rows.push(cur);
+  return rows;
+}
+
+/* largest tile size that keeps the whole chain inside a sensible number of rows */
+function layoutChain(board){
+  const W=laneWidth(), land=isLandscape(), gap=3;
+  const maxRows = land ? 2 : 4, minU = 20, maxU = land ? 30 : 34;
+  let u=maxU, rows=splitRows(board,u,gap,W);
+  while(rows.length > maxRows && u > minU){ u -= 1; rows=splitRows(board,u,gap,W); }
+  return {u, rows};
 }
 
 /* ============================================================
@@ -785,6 +907,12 @@ function homeHTML(){
   </div>`:''}
   ${FILEURL?`<p class="muted" style="text-align:center;margin:0 0 14px">Running from a saved file — everyone needs their own copy of it.</p>`:''}
 
+  ${SAVED?`<div class="plate card" style="border-color:rgba(223,168,60,.4)">
+    <h2>Table ${esc(SAVED.code)} is still open</h2>
+    <p class="muted">You were hosting this one. Bring it back and everyone still on the code reconnects on their own.</p>
+    <button class="btn btn--wide" id="resume" style="margin-top:12px">Resume table ${esc(SAVED.code)}</button>
+  </div>`:''}
+
   <div style="text-align:center"><button class="linkbtn" id="solo">Or play hot-seat on this one device</button></div>
 
   ${ERRLOG.length?`<details class="plate card" style="padding:14px 16px;margin-top:12px">
@@ -820,6 +948,13 @@ function wireHome(){
   document.getElementById('create').onclick=createRoom;
   document.getElementById('join').onclick=joinRoom;
   document.getElementById('solo').onclick=startLocal;
+  const rs=document.getElementById('resume');
+  if(rs) rs.onclick=()=>{
+    const sv=SAVED; if(!sv) return;
+    ME.name = sv.g.players.find(p=>p.id===ME.id)?.name || ME.name;
+    LOCAL=false; G=null;
+    hostRoom(0, sv.code, sv.g);
+  };
 }
 
 function needName(){
@@ -840,40 +975,27 @@ function joinRoom(){
   if(UI.code.length!==4){ UI.err='The code is 4 letters.'; render(); return; }
   if(typeof Peer==='undefined'){ UI.err='Networking script did not load. Reload the page.'; render(); return; }
   ME.name=n; lset('me', ME);
-  LOCAL=false; NET.role='guest'; NET.status='connecting'; UI.err=''; render();
+  LOCAL=false; NET.role='guest'; NET.status='connecting'; NET.joined=false; UI.err=''; render();
 
   const peer = new Peer(PEER_OPTS);
   NET.peer = peer;
-  let joined=false, dead=false;
+  const code = UI.code;
   const fail = (m)=>{
-    if(dead) return; dead=true; clearTimeout(timer);
+    if(NET.joined) return;                 // already in the game — never tear it down
+    clearTimeout(NET.joinTimer); clearTimeout(RETRY);
     try{ peer.destroy(); }catch(e){}
     NET.role='idle'; NET.status=''; NET.host=null; G=null; UI.err=m; render();
   };
-  const timer = setTimeout(()=>fail('No answer from table '+UI.code+'. Check the code, and that the host still has the page open.'), 12000);
+  NET.joinTimer = setTimeout(()=>fail('No answer from table '+code+'. Check the code, and that the host still has the page open.'), 12000);
 
   peer.on('error', e=>{
     noteErr('peer: '+e.type+' — '+(e.message||''));
-    if(e.type==='peer-unavailable') fail('No open table with code '+UI.code+'.');
-    else if(!joined) fail(explainPeerError(e));
+    if(NET.joined){ guestRetry(code); return; }
+    if(e.type==='peer-unavailable') fail('No open table with code '+code+'.');
+    else fail(explainPeerError(e));
   });
-  peer.on('open', ()=>{
-    const conn = peer.connect(PREFIX+UI.code, {reliable:true, metadata:{id:ME.id, name:ME.name}});
-    NET.host = conn;
-    conn.on('open', ()=>{ joined=true; clearTimeout(timer); NET.status='ready'; });
-    conn.on('data', m=>{
-      if(!m) return;
-      if(m.t==='state') onRemoteState(m.g);
-      else if(m.t==='deny') fail(m.why);
-    });
-    conn.on('close', ()=>{
-      if(dead) return;
-      if(!joined) return;
-      dead=true;
-      NET.role='idle'; NET.status=''; NET.host=null; G=null;
-      UI.err='The host closed the table.'; render();
-    });
-  });
+  peer.on('disconnected', ()=>{ if(NET.joined){ NET.status='reconnecting'; render(); guestRetry(code); } });
+  peer.on('open', ()=>guestAttach(peer, code));
 }
 
 function startLocal(){
@@ -897,7 +1019,8 @@ function lobbyHTML(){
     <div><div class="muted" style="margin-bottom:3px">Table code</div><b>${G.code}</b></div>
     <button class="btn" id="copy">${FILEURL?'Share code':'Share link'}</button>
   </div>
-  <p class="muted" style="margin:10px 2px 0">${FILEURL?'Everyone opens their own copy of the file and types this code. Up to 4 players.':'The link opens this page with the code already filled in. Up to 4 players, no sign-up.'}</p>`}
+  <p class="muted" style="margin:10px 2px 0">${FILEURL?'Everyone opens their own copy of the file and types this code. Up to 4 players.':'The link opens this page with the code already filled in. Up to 4 players, no sign-up.'}</p>
+  ${NET.role==='host'?`<p class="muted" style="margin:8px 2px 0">You are hosting, so keep this tab in front while you play. Phones freeze background tabs — if you do switch away, everyone reconnects when you come back.</p>`:''}`}
 
   <div class="seatlist">
     ${G.players.map((p,i)=>{
@@ -961,6 +1084,8 @@ function setMode(m){
   G.mode=m; G.scores=new Array(sideCount(G)).fill(0); sync();
 }
 function leave(){
+  clearTimeout(RETRY); clearTimeout(NET.joinTimer);
+  NET.joined=false;
   try{ if(NET.peer) NET.peer.destroy(); }catch(e){}
   NET.peer=null; NET.host=null; NET.conns.clear(); NET.role='idle'; NET.status='';
   G=null; LOCAL=false; UI.sel=null; UI.err=''; render();
@@ -986,16 +1111,31 @@ function gameHTML(){
     </div>`).join('');
 
   /* seats */
+  const on = G.online || [];
   const strip=G.players.map((p,i)=>`
-    <div class="seatpip ${r.turn===i?'is-turn':''}">
+    <div class="seatpip ${r.turn===i?'is-turn':''} ${on.length&&on[i]===false?'off':''}">
       <div class="n">${esc(p.name)}</div>
-      <div class="c">${r.hands[p.id].length} tiles</div>
+      <div class="c">${on.length&&on[i]===false?'away':r.hands[p.id].length+' tiles'}</div>
     </div>`).join('');
 
-  /* chain */
-  const chain = r.board.length
-    ? `<div class="chain">${r.board.map((b,i)=>tileHTML(b.t, !b.d, i>=UI.animUpTo?'is-new':'')).join('')}</div>`
-    : `<div class="empty-felt">${esc(G.players[r.turn].name)} opens the round</div>`;
+  /* chain — wraps into rows that alternate direction, like tiles running out of table */
+  let chain;
+  if(r.board.length){
+    const {u, rows} = layoutChain(r.board);
+    const grew = r.board.length > UI.animUpTo;
+    const newIdx = grew && G.lastAct && G.lastAct.type==='play'
+      ? (G.lastAct.side==='l' ? 0 : r.board.length-1) : -1;
+    let k=0, html='';
+    rows.forEach((row, ri)=>{
+      const rev = ri%2===1;
+      html += `<div class="crow ${rev?'rev':''}">` +
+        row.map(b=>tileHTML(b.t, !b.d, (k++)===newIdx?'is-new':'', rev)).join('') +
+      `</div>`;
+    });
+    chain = `<div class="chain" style="--unit:${u}px">${html}</div>`;
+  } else {
+    chain = `<div class="empty-felt">${esc(G.players[r.turn].name)} opens the round</div>`;
+  }
 
   const scoring = ev && ev.total%5===0 && ev.total>0;
   const endsBar = ev ? `
@@ -1043,6 +1183,7 @@ function gameHTML(){
 
   return `
   ${mast(`${LOCAL?'hot-seat':'table '+G.code} · to ${G.target}<br>round ${G.roundNo}`)}
+  ${NET.status==='reconnecting'?`<div class="wire"><span class="lamp on"></span>Reconnecting — the table is still here, hold on</div>`:''}
   <div class="topbar"><div class="board-head">${heads}</div><div class="seatstrip">${strip}</div></div>
   <div class="felt">${endsBar}<div class="lane" id="lane">${chain}</div>${picker}</div>
   ${bar}
@@ -1088,9 +1229,13 @@ function roundModal(){
   const who = e.winner!=null ? (G.mode==='teams'?TEAM_NAMES[e.winner]:sideName(G,e.winner)) : null;
   const why = e.winner==null
     ? 'Both sides held the same pips. Nothing is written down.'
-    : (e.reason==='domino'
-        ? `${esc(G.players[e.winSeat].name)} went out. ${who} takes ${e.pts} for the pips left on the table.`
-        : `${who} held the fewer pips and takes ${e.pts}.`);
+    : e.pts===0
+      ? (e.reason==='domino'
+          ? `${esc(G.players[e.winSeat].name)} went out, but what was left rounds down to nothing.`
+          : `${who} held the fewer pips, but the difference rounds down to nothing.`)
+      : (e.reason==='domino'
+          ? `${esc(G.players[e.winSeat].name)} went out. ${who} takes ${e.pts} for the pips left on the table.`
+          : `${who} held the fewer pips and takes ${e.pts}.`);
   return `<div class="scrim"><div class="modal">
     <div class="crown">Round ${G.roundNo}</div>
     <h2>${title}</h2><p class="why">${why}</p>
@@ -1112,40 +1257,20 @@ function matchModal(){
   </div></div>`;
 }
 
-/* shrink the chain (and hand) just enough that every tile stays on screen */
+/* the hand still shrinks to stay on one screen-width */
 function fitBoard(){
-  const lane=document.getElementById('lane');
-  const b = G && G.round ? G.round.board : null;
-  if(lane && (!b || !b.length)) lane.style.minHeight='';
-  if(lane && b && b.length){
-    const chain=lane.querySelector('.chain');
-    if(chain){
-      const gap=3, doubles=b.filter(x=>x.d).length, flat=b.length-doubles;
-      const avail=lane.clientWidth-30;
-      const max = window.innerHeight<560 && window.innerWidth>window.innerHeight ? 30 : 34;
-      let u=(avail - gap*(b.length-1)) / (doubles + 2*flat);
-      u = Math.max(20, Math.min(max, u));          // 20px floor keeps pips readable
-      chain.style.setProperty('--unit', u.toFixed(1)+'px');
-      lane.style.minHeight = Math.round(u*2 + 14)+'px';   // no dead felt above and below
-    }
-  }
   const hand=document.getElementById('hand');
   if(hand && hand.children.length){
     const n=hand.children.length, gap=7;
     const avail=hand.clientWidth-4;
-    const max = window.innerHeight<560 && window.innerWidth>window.innerHeight ? 36 : 44;
-    let u=(avail - gap*(n-1)) / n;
+    const max=isLandscape()?36:44;
+    const u=(avail - gap*(n-1))/n;
     hand.style.setProperty('--hunit', Math.max(26, Math.min(max, u)).toFixed(1)+'px');
   }
 }
 
 function wireGame(){
   fitBoard();
-  const lane=document.getElementById('lane');
-  if(lane && G.round.board.length){
-    const side = G.lastAct && G.lastAct.type==='play' ? G.lastAct.side : 'r';
-    lane.scrollLeft = side==='l' ? 0 : lane.scrollWidth;
-  }
   UI.animUpTo = G.round.board.length;
 
   const seat=mySeat(), myTurn=G.round.turn===seat && G.phase==='playing';
@@ -1200,14 +1325,21 @@ function afterRender(){
 }
 
 /* ---------- boot ---------- */
+let SAVED = null;
 (function boot(){
+  const sv = lget('save');
+  if(sv && sv.g && Date.now()-sv.at < 6*60*60*1000 && sv.g.phase!=='matchover') SAVED = sv;
   const saved = lget('me');
   ME = saved && saved.id ? saved : { id:'u'+Math.random().toString(36).slice(2,10), name:'' };
   if(!saved) lset('me', ME);
   let rt=null;
-  const refit=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ fitBoard(); }, 120); };
+  const refit=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ if(G) render(); else fitBoard(); }, 140); };
   window.addEventListener('resize', refit);
   window.addEventListener('orientationchange', refit);
+  document.addEventListener('visibilitychange', wake);
+  window.addEventListener('pageshow', wake);
+  window.addEventListener('focus', wake);
+  window.addEventListener('online', wake);
   const q = new URLSearchParams(location.search).get('room');
   if(q) UI.code = q.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
   render();
