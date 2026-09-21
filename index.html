@@ -2287,10 +2287,23 @@ let SAVED = null;
   const saved = lget('me');
   ME = saved && saved.id ? saved : { id:'u'+Math.random().toString(36).slice(2,10), name:'' };
   if(!saved) lset('me', ME);
-  let rt=null;
-  const refit=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ if(G) render(); else fitBoard(); }, 140); };
-  window.addEventListener('resize', refit);
-  window.addEventListener('orientationchange', refit);
+  /* A phone fires `resize` every time it hides or shows its URL bar, which is
+     to say on almost every scroll. Only the width and the orientation change
+     what the table looks like, so a height-only resize is ignored — otherwise
+     the screen is rebuilt mid-scroll, every animation restarts and the scroll
+     position is restored to where it was a moment ago. */
+  let rt=null, lastW=window.innerWidth, lastLand=isLandscape();
+  const refit=(force)=>{
+    clearTimeout(rt);
+    rt=setTimeout(()=>{
+      const w=window.innerWidth, land=isLandscape();
+      if(force!==true && w===lastW && land===lastLand) return;
+      lastW=w; lastLand=land;
+      if(G) render(); else fitBoard();
+    }, 140);
+  };
+  window.addEventListener('resize', ()=>refit(false));
+  window.addEventListener('orientationchange', ()=>refit(true));
   document.addEventListener('visibilitychange', wake);
   window.addEventListener('pageshow', wake);
   window.addEventListener('focus', wake);
