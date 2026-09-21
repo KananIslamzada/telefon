@@ -357,6 +357,202 @@ details[open] summary{color:var(--ink-70)}
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
 }
+/* ---------- table talk: dock, reactions, chat, voice ---------- */
+body.talk-on #app{padding-bottom:84px}
+#live{position:fixed;inset:0;z-index:55;pointer-events:none}
+
+.dock{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:0;z-index:57;
+  width:100%;max-width:520px;display:flex;gap:8px;align-items:stretch;
+  padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+  background:linear-gradient(180deg,rgba(7,15,13,0),rgba(7,15,13,.86) 34%,rgba(7,15,13,.97));
+  pointer-events:auto;
+}
+.dbtn{
+  flex:0 0 auto;width:46px;height:46px;border-radius:12px;display:grid;place-items:center;
+  font-size:20px;line-height:1;position:relative;
+  background:rgba(240,231,212,.07);border:1px solid var(--ink-20);color:var(--bone);
+  transition:transform .12s ease,background .12s ease;
+}
+.dbtn:active{transform:translateY(1px);background:rgba(240,231,212,.13)}
+.dbtn[aria-expanded="true"]{background:rgba(223,168,60,.18);border-color:var(--brass)}
+.dbtn .badge{
+  position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;
+  border-radius:999px;background:var(--nar);color:#fff;font-size:11px;font-weight:800;
+  display:grid;place-items:center;border:2px solid #0A1412;
+}
+.dbtn .badge[hidden]{display:none}
+.ptt{
+  flex:1;min-width:0;height:46px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;gap:9px;font-weight:700;font-size:14.5px;letter-spacing:.01em;
+  background:rgba(240,231,212,.07);border:1px solid var(--ink-20);color:var(--ink-70);
+  touch-action:none;user-select:none;-webkit-user-select:none;
+  transition:background .12s ease,border-color .12s ease,color .12s ease,transform .1s ease;
+}
+.ptt .mic{font-size:17px;filter:grayscale(1) opacity(.7)}
+.ptt.live{
+  background:linear-gradient(180deg,#E8B44C,#C08C22);border-color:#F0CA78;color:#241703;
+  transform:scale(.985);box-shadow:0 0 0 0 rgba(223,168,60,.5);animation:pulse 1.2s infinite;
+}
+.ptt.live .mic{filter:none}
+.ptt.off{opacity:.55}
+
+/* reaction tray */
+.tray{
+  position:fixed;left:50%;transform:translateX(-50%);z-index:57;
+  bottom:calc(66px + env(safe-area-inset-bottom));
+  width:100%;max-width:520px;padding:0 12px;pointer-events:auto;
+  animation:trayin .18s cubic-bezier(.2,.9,.3,1.2);
+}
+@keyframes trayin{from{opacity:0;transform:translate(-50%,10px)}}
+.tray .in{
+  display:flex;gap:6px;justify-content:space-between;padding:9px 10px;border-radius:14px;
+  background:#101F1A;border:1px solid var(--ink-20);box-shadow:0 14px 34px rgba(0,0,0,.55);
+}
+.tray button{
+  flex:1;height:44px;border-radius:10px;font-size:23px;line-height:1;
+  background:rgba(240,231,212,.05);border:1px solid transparent;
+  transition:transform .1s ease,background .12s ease;
+}
+.tray button:active{transform:scale(1.18);background:rgba(223,168,60,.2)}
+
+/* chat panel */
+.chatpane{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:0;z-index:58;
+  width:100%;max-width:520px;display:flex;flex-direction:column;
+  max-height:min(62vh,440px);pointer-events:auto;
+  background:linear-gradient(180deg,#14291F,#0B1613);
+  border:1px solid var(--ink-20);border-bottom:0;border-radius:16px 16px 0 0;
+  box-shadow:0 -16px 44px rgba(0,0,0,.6);
+  animation:panein .22s cubic-bezier(.2,.85,.3,1.05);
+}
+@keyframes panein{from{transform:translate(-50%,100%)}}
+.chatpane .hd{
+  display:flex;align-items:center;gap:8px;padding:12px 14px 9px;flex:0 0 auto;
+  border-bottom:1px solid var(--ink-10);
+}
+.chatpane .hd h3{margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em}
+.chatpane .hd .x{margin-left:auto;font-size:19px;color:var(--ink-45);padding:2px 6px;line-height:1}
+.chatlog{
+  flex:1 1 auto;overflow-y:auto;overscroll-behavior:contain;
+  padding:10px 14px;display:flex;flex-direction:column;gap:8px;
+}
+.msg{display:flex;gap:8px;align-items:flex-start;animation:tin .2s ease}
+.msg .who{
+  flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
+  font-size:11px;font-weight:800;color:#0C1714;margin-top:1px;
+}
+.msg .bd{min-width:0;flex:1}
+.msg .nm{font-size:11.5px;color:var(--ink-45);font-weight:600;line-height:1.2}
+.msg .tx{font-size:14.5px;line-height:1.4;color:var(--bone);word-wrap:break-word;overflow-wrap:anywhere}
+.msg.emo .tx{font-size:27px;line-height:1.15}
+.msg.sys{justify-content:center}
+.msg.sys .tx{font-size:12px;color:var(--ink-45);text-align:center}
+.chatlog .none{color:var(--ink-45);font-size:13px;text-align:center;padding:22px 10px;line-height:1.55}
+.quick{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:8px 14px 0;flex:0 0 auto}
+.quick::-webkit-scrollbar{display:none}
+.quick button{
+  flex:0 0 auto;padding:7px 12px;border-radius:999px;font-size:13px;font-weight:600;
+  background:rgba(240,231,212,.06);border:1px solid var(--ink-20);color:var(--ink-70);white-space:nowrap;
+}
+.quick button:active{background:rgba(223,168,60,.2);color:var(--bone)}
+.chatform{
+  display:flex;gap:8px;padding:10px 14px calc(12px + env(safe-area-inset-bottom));flex:0 0 auto;
+}
+.chatform input{
+  flex:1;min-width:0;padding:11px 13px;border-radius:10px;background:rgba(0,0,0,.35);
+  border:1px solid var(--ink-20);color:var(--bone);font:inherit;font-size:15px;
+}
+.chatform input::placeholder{color:rgba(240,231,212,.3)}
+.chatform button{
+  flex:0 0 auto;width:46px;border-radius:10px;font-size:17px;
+  background:linear-gradient(180deg,#E8B44C,#C08C22);color:#241703;border:1px solid #F0CA78;
+}
+.chatform button:active{transform:translateY(1px)}
+
+/* transient bubbles above the dock */
+.fxstack{
+  position:fixed;left:0;right:0;bottom:calc(72px + env(safe-area-inset-bottom));z-index:56;
+  max-width:520px;margin:0 auto;padding:0 14px;pointer-events:none;
+  display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+}
+.bub{
+  max-width:86%;display:flex;gap:7px;align-items:center;
+  padding:8px 13px 8px 9px;border-radius:999px;
+  background:rgba(10,20,17,.93);border:1px solid var(--ink-20);
+  box-shadow:0 8px 22px rgba(0,0,0,.5);
+  animation:bubin .28s cubic-bezier(.2,.9,.3,1.15);
+}
+.bub.out{animation:bubout .38s ease forwards}
+@keyframes bubin{from{opacity:0;transform:translateY(12px) scale(.94)}}
+@keyframes bubout{to{opacity:0;transform:translateY(-6px) scale(.97)}}
+.bub .who{
+  flex:0 0 auto;width:21px;height:21px;border-radius:50%;display:grid;place-items:center;
+  font-size:10px;font-weight:800;color:#0C1714;
+}
+.bub .tx{font-size:14px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.bub .tx b{font-weight:600;color:var(--ink-45);font-size:12px;margin-right:5px}
+.bub.emo .tx{font-size:22px}
+
+/* a reaction also throws the emoji up the screen */
+.burst{
+  position:fixed;z-index:59;font-size:38px;pointer-events:none;
+  animation:burst 1.5s cubic-bezier(.22,.7,.3,1) forwards;
+  text-shadow:0 4px 18px rgba(0,0,0,.55);
+}
+@keyframes burst{
+  0%{opacity:0;transform:translate(-50%,0) scale(.4) rotate(var(--rot))}
+  16%{opacity:1;transform:translate(-50%,-26px) scale(1.25) rotate(0deg)}
+  70%{opacity:1}
+  100%{opacity:0;transform:translate(-50%,calc(-1 * var(--rise))) scale(.85) rotate(var(--rot))}
+}
+
+/* who is talking */
+.seatpip.is-talk{border-color:var(--firuze);background:rgba(51,166,160,.16)}
+.seatpip.is-talk .n{color:var(--firuze)}
+.seatpip.is-talk .n::after{content:" ●";font-size:9px;vertical-align:middle;animation:pulse 1s infinite}
+.voicehint{font-size:11.5px;color:var(--ink-45);padding:0 2px}
+
+@media (orientation:landscape) and (max-height:560px){
+  body.talk-on #app{padding-bottom:10px;padding-right:76px}
+
+  .dock{
+    left:auto;right:0;bottom:auto;top:50%;transform:translateY(-50%);
+    width:auto;max-width:none;flex-direction:column;align-items:center;gap:8px;
+    padding:10px calc(8px + env(safe-area-inset-right)) 10px 8px;
+    background:linear-gradient(270deg,rgba(7,15,13,.97),rgba(7,15,13,.82) 62%,rgba(7,15,13,0));
+  }
+  .dbtn{width:46px;height:42px;font-size:19px}
+  .ptt{
+    flex:0 0 auto;width:46px;height:104px;flex-direction:column;gap:5px;
+    font-size:10.5px;font-weight:700;line-height:1.2;text-align:center;padding:9px 3px;
+  }
+  .ptt .mic{font-size:19px}
+  .ptt .lb{display:block;max-width:100%;overflow:hidden}
+
+  .tray{
+    left:auto;right:74px;bottom:auto;top:50%;transform:translateY(-50%);
+    width:auto;max-width:none;padding:0;animation:trayinL .18s cubic-bezier(.2,.9,.3,1.2);
+  }
+  .tray .in{display:grid;grid-template-columns:repeat(2,44px);gap:6px;padding:9px}
+  .tray button{width:44px;height:40px;font-size:20px}
+
+  /* stop short of the dock so the mic stays reachable while the panel is open */
+  .chatpane{
+    left:auto;right:76px;top:0;bottom:0;transform:none;
+    width:min(340px,56vw);max-width:none;max-height:none;
+    border-radius:16px 0 0 16px;border-bottom:1px solid var(--ink-20);
+    animation:paneinL .22s cubic-bezier(.2,.85,.3,1.05);
+  }
+  .chatform{padding:10px 14px 12px}
+
+  .fxstack{
+    left:0;right:auto;bottom:10px;margin:0;
+    max-width:min(430px,58vw);padding:0 14px;
+  }
+}
+@keyframes trayinL{from{opacity:0;transform:translate(14px,-50%)}}
+@keyframes paneinL{from{transform:translateX(calc(100% + 76px))}}
 </style>
 
 <div id="app"></div>
@@ -384,7 +580,7 @@ let ME = { id:null, name:'' };
 let G = null;                       // shared game state
 let LOCAL = false;                  // pass-and-play on one device
 let UI = { sel:null, code:'', animUpTo:0, sound:true, err:'', lastSeq:-1 };
-const NET = { role:'idle', peer:null, conns:new Map(), host:null, status:'' };
+const NET = { role:'idle', peer:null, conns:new Map(), host:null, status:'', seen:new Map(), hostSeen:0 };
 const PREFIX = 'tlfn-v1-';
 
 /* Signalling only — no game data ever touches this server; the two phones talk
@@ -393,11 +589,15 @@ const PREFIX = 'tlfn-v1-';
    { host:'peer.yourdomain.com', port:443, secure:true, path:'/' }
    Add `config:{iceServers:[...]}` here if you ever need a TURN relay for
    players on locked-down mobile networks. */
+const ICE = { iceServers:[
+  { urls:['stun:stun.l.google.com:19302','stun:stun1.l.google.com:19302'] },
+  { urls:'stun:global.stun.twilio.com:3478' }
+]};
 const PEER_OPTS = (()=>{
   const q = new URLSearchParams(location.search).get('peer');
-  if(!q) return { debug:0 };
+  if(!q) return { debug:0, config:ICE };
   const [host, port] = q.split(':');
-  return { debug:0, host, port: +(port||9000), path:'/', secure: location.protocol==='https:' };
+  return { debug:0, config:ICE, host, port: +(port||9000), path:'/', secure: location.protocol==='https:' };
 })();
 
 /* A preview/embed frame blocks the connection a table needs. Worth saying so. */
@@ -651,10 +851,13 @@ function sync(){                       // state changed on the host / hot-seat d
   G.seq = (G.seq||0)+1;
   if(NET.role==='host'){
     G.online = G.players.map(p => p.id===ME.id || NET.conns.has(p.id));
+    G.peers = {};
+    if(NET.peer && NET.peer.id) G.peers[ME.id] = NET.peer.id;
+    NET.conns.forEach((c,pid)=>{ if(c.peer) G.peers[pid] = c.peer; });
     lset('save', { code:G.code, at:Date.now(), g:G });
   }
   render();
-  if(NET.role==='host') broadcast();
+  if(NET.role==='host'){ broadcast(); voiceSync(); }
 }
 
 function viewFor(pid){                 // hide everyone else's tiles
@@ -724,6 +927,34 @@ setInterval(()=>{
   if(NET.peer.disconnected) hostWake();
 }, 2500);
 
+/* A data channel can die without ever firing `close` — a phone that slept on
+   mobile data just stops answering. Ping every guest and drop the ones that
+   have gone quiet, so `away` on the seat strip means something. */
+const PING_EVERY = 4000, DEAD_AFTER = 14000;
+setInterval(()=>{
+  const now = Date.now();
+  if(NET.role==='host'){
+    let lost = false;
+    NET.conns.forEach((c,pid)=>{
+      try{ if(c.open) c.send({t:'ping'}); }catch(e){}
+      const seen = NET.seen.get(pid) || 0;
+      if(now - seen > DEAD_AFTER){
+        try{ c.close(); }catch(e){}
+        NET.conns.delete(pid); NET.seen.delete(pid); lost = true;
+      }
+    });
+    if(lost) sync();
+  } else if(NET.role==='guest' && NET.joined){
+    const c = NET.host;
+    try{ if(c && c.open) c.send({t:'ping'}); }catch(e){}
+    if(now - (NET.hostSeen || 0) > DEAD_AFTER && NET.status!=='reconnecting'){
+      NET.status='reconnecting'; render();
+      guestRetry(G ? G.code : UI.code);
+    }
+  }
+  voiceSync();                 // heal any call that failed to place
+}, PING_EVERY);
+
 function hostWake(){
   const peer=NET.peer;
   if(!peer || peer.destroyed || !peer.disconnected) return;
@@ -736,6 +967,7 @@ function hostRoom(tries, fixedCode, restore){
   NET.role='host'; NET.status='connecting'; UI.err=''; render();
   const peer = new Peer(PREFIX+code, PEER_OPTS);
   NET.peer = peer;
+  voiceAttach(peer);
 
   peer.on('open', ()=>{
     NET.status='ready';
@@ -774,13 +1006,31 @@ function hostRoom(tries, fixedCode, restore){
         G.players.push({id:pid, name:String(nm||'Player').slice(0,12)});
         G.scores = new Array(sideCount(G)).fill(0);
       }
+      // a reconnecting phone arrives on a new channel; retire the one it replaces
+      const old = NET.conns.get(pid);
+      if(old && old!==conn){ old._retired = true; try{ old.close(); }catch(e){} }
       NET.conns.set(pid, conn);
+      NET.seen.set(pid, Date.now());
       if(NET.status==='reconnecting') NET.status='ready';
       sync();
+      try{
+        conn.send({t:'rt', e:{k:'history', items:TALK.log.slice(-25)}});
+        TALK.voice.forEach(vp=>conn.send({t:'rt', e:{k:'voice', on:true, pid:vp}}));
+      }catch(e){}
     });
-    conn.on('data', m=>{ if(m && m.t==='act') applyAction(pid, m.a); });
+    conn.on('data', m=>{
+      if(!m) return;
+      NET.seen.set(pid, Date.now());
+      if(m.t==='act') applyAction(pid, m.a);
+      else if(m.t==='rt') rtIn(pid, m.e);
+      else if(m.t==='ping'){ try{ conn.send({t:'pong'}); }catch(e){} }
+    });
     conn.on('close', ()=>{
-      NET.conns.delete(pid);
+      // a stale channel closing must never unseat the live one that replaced it
+      if(conn._retired || NET.conns.get(pid)!==conn) return;
+      NET.conns.delete(pid); NET.seen.delete(pid);
+      if(TALK.voice.delete(pid)){ const e={k:'voice', on:false, pid}; rtApply(e); rtFan(e, null); }
+      TALK.speaking.delete(pid); paintSpeaking();
       if(G && G.phase==='lobby'){
         G.players = G.players.filter(p=>p.id!==pid);
         G.scores = new Array(sideCount(G)).fill(0);
@@ -794,15 +1044,31 @@ function hostRoom(tries, fixedCode, restore){
 let RETRY = null;
 
 function guestAttach(peer, code){
+  // never leave a second channel open to the same host: the old one's `close`
+  // would otherwise look like a fresh disconnect and start another retry
+  const prev = NET.host;
+  if(prev){ prev._retired = true; try{ prev.close(); }catch(e){} }
+
   const conn = peer.connect(PREFIX+code, {reliable:true, metadata:{id:ME.id, name:ME.name}});
   NET.host = conn;
-  conn.on('open', ()=>{ NET.joined=true; NET.status='ready'; clearTimeout(NET.joinTimer); render(); });
+  conn.on('open', ()=>{
+    if(NET.host!==conn){ try{ conn.close(); }catch(e){} return; }
+    NET.joined=true; NET.status='ready'; NET.hostSeen=Date.now();
+    clearTimeout(NET.joinTimer);
+    clearTimeout(RETRY); RETRY=null;        // we are in — stop dialling
+    render(); voiceSync();
+    setTimeout(()=>rtSend({k:'voice', on: TALK.micState==='on'}), 400);
+  });
   conn.on('data', m=>{
     if(!m) return;
+    NET.hostSeen = Date.now();
     if(m.t==='state') onRemoteState(m.g);
+    else if(m.t==='rt') rtApply(m.e);
+    else if(m.t==='ping'){ try{ conn.send({t:'pong'}); }catch(e){} }
     else if(m.t==='deny'){ NET.joined=false; toast(m.why); leave(); }
   });
   conn.on('close', ()=>{
+    if(conn._retired || NET.host!==conn) return;
     if(NET.role!=='guest' || !NET.joined) return;
     NET.status='reconnecting'; render();   // keep the board on screen, keep trying
     guestRetry(code);
@@ -811,15 +1077,33 @@ function guestAttach(peer, code){
 }
 
 function guestRetry(code){
-  clearTimeout(RETRY);
+  clearTimeout(RETRY); RETRY=null;
+  if(NET.role!=='guest') return;
   RETRY = setTimeout(()=>{
+    RETRY = null;
     if(NET.role!=='guest') return;
+    if(NET.host && NET.host.open){         // it came back on its own
+      if(NET.status!=='ready'){ NET.status='ready'; render(); }
+      return;
+    }
     const peer = NET.peer;
-    if(!peer || peer.destroyed){ guestRetry(code); return; }
+    if(!peer || peer.destroyed){ guestRebuild(code); return; }
     if(peer.disconnected){ try{ peer.reconnect(); }catch(e){} }
     guestAttach(peer, code);
-    guestRetry(code);                      // keep a timer running until a connection opens
+    guestRetry(code);                      // one timer at a time, cleared the moment we are in
   }, 3000);
+}
+
+/* the Peer object itself died — build a new one and walk back in on the same code */
+function guestRebuild(code){
+  if(NET.role!=='guest' || typeof Peer==='undefined') return;
+  let peer;
+  try{ peer = new Peer(PEER_OPTS); }catch(e){ noteErr('rebuild: '+e.message); guestRetry(code); return; }
+  NET.peer = peer;
+  voiceAttach(peer);
+  peer.on('error', e=>{ noteErr('peer: '+e.type); guestRetry(code); });
+  peer.on('open', ()=>{ guestAttach(peer, code); });
+  guestRetry(code);
 }
 
 function onRemoteState(g){
@@ -827,8 +1111,9 @@ function onRemoteState(g){
   G = g;
   if(!G.round || bCount(G.round.board) < prev) UI.animUpTo = G.round ? bCount(G.round.board) : 0;
   UI.sel = null;
-  if(NET.status==='reconnecting'){ NET.status='ready'; clearTimeout(RETRY); }
+  if(NET.status==='reconnecting'){ NET.status='ready'; clearTimeout(RETRY); RETRY=null; }
   render();
+  voiceSync();
 }
 
 /* one place that wakes everything back up when the app comes to the front */
@@ -942,11 +1227,12 @@ function layoutTable(b, res){
    ============================================================ */
 function render(){
   const y = window.scrollY;
-  if(!G){ A.innerHTML = homeHTML(); wireHome(); return; }
-  if(G.phase==='lobby'){ A.innerHTML = lobbyHTML(); wireLobby(); return; }
+  if(!G){ A.innerHTML = homeHTML(); wireHome(); liveRender(); return; }
+  if(G.phase==='lobby'){ A.innerHTML = lobbyHTML(); wireLobby(); liveRender(); return; }
   A.innerHTML = gameHTML();
   wireGame();
   window.scrollTo(0,y);
+  liveRender();
 }
 
 function mast(sub){
@@ -1060,6 +1346,7 @@ function joinRoom(){
 
   const peer = new Peer(PEER_OPTS);
   NET.peer = peer;
+  voiceAttach(peer);
   const code = UI.code;
   const fail = (m)=>{
     if(NET.joined) return;                 // already in the game — never tear it down
@@ -1165,8 +1452,10 @@ function setMode(m){
   G.mode=m; G.scores=new Array(sideCount(G)).fill(0); sync();
 }
 function leave(){
-  clearTimeout(RETRY); clearTimeout(NET.joinTimer);
-  NET.joined=false;
+  clearTimeout(RETRY); RETRY=null; clearTimeout(NET.joinTimer);
+  voiceStop();
+  TALK.log.length=0; TALK.unread=0; TALK.open=false; TALK.tray=false; TALK.draft='';
+  NET.joined=false; NET.seen.clear(); NET.hostSeen=0;
   try{ if(NET.peer) NET.peer.destroy(); }catch(e){}
   NET.peer=null; NET.host=null; NET.conns.clear(); NET.role='idle'; NET.status='';
   G=null; LOCAL=false; UI.sel=null; UI.err=''; render();
@@ -1433,6 +1722,459 @@ function afterRender(){
     if(plate){ const r=plate.getBoundingClientRect(); flyPoints(r.left+r.width/2, r.top+8, '+'+a.got); }
   }
 }
+
+
+/* ============================================================
+   Table talk — reactions, chat and push-to-talk.
+   Everything here rides the same connections the game already has,
+   sits in its own overlay outside #app so a re-render never disturbs
+   a half-typed message, and is wrapped so a failure can never take
+   the game down with it.
+   ============================================================ */
+
+const REACTIONS = ['👏','🔥','😂','😮','😤','🤝','🧠','🍀'];
+const QUICK = ['Salam!','Gözəl gediş','Növbən','Bir dəqiqə','Afərin!','Getdik!','Oy, nə etdim','Yaxşı oyun'];
+
+const TALK = {
+  open:false, unread:0, tray:false, log:[], draft:'',
+  speaking:new Set(),             // player ids transmitting right now
+  out:null, micTrack:null, micState:'idle',   // idle | asking | on | denied
+  voice:new Set(),                // players who have armed a microphone
+  calls:new Map(), audio:new Map(), held:false
+};
+
+const TALKABLE = ()=> !!G && !LOCAL && (NET.role==='host' || NET.role==='guest');
+const uid = ()=> Math.random().toString(36).slice(2,10);
+
+function seatColor(pid){
+  if(!G) return 'var(--brass)';
+  const i = G.players.findIndex(p=>p.id===pid);
+  if(i<0) return 'var(--brass)';
+  return SIDE_COLORS[G.mode==='teams' ? i%2 : i];
+}
+function nameOf(pid){
+  const p = G && G.players.find(x=>x.id===pid);
+  return p ? p.name : '—';
+}
+
+/* ---------- transport ----------
+   Guests post to the host, the host fans out to everyone else. The
+   sender always shows its own message immediately, so the table never
+   feels like it is waiting on the network to speak. */
+function rtSend(e){
+  if(!TALKABLE()) return;
+  e.pid = ME.id; e.ts = Date.now(); e.id = e.id || uid();
+  rtApply(e);
+  try{
+    if(NET.role==='host') rtFan(e, ME.id);
+    else if(NET.host && NET.host.open) NET.host.send({t:'rt', e});
+  }catch(x){ noteErr('rt send: '+x.message); }
+}
+function rtFan(e, exceptPid){
+  NET.conns.forEach((c,pid)=>{
+    if(pid===exceptPid) return;
+    try{ if(c.open) c.send({t:'rt', e}); }catch(x){}
+  });
+}
+/* host side: a guest said something */
+function rtIn(pid, e){
+  if(!e || typeof e!=='object') return;
+  if(e.k==='history') return;                   // only the host hands those out
+  e.pid = pid;                                  // never trust a claimed sender
+  rtApply(e);
+  if(NET.role==='host') rtFan(e, pid);
+}
+
+function rtApply(e){
+  try{
+    if(e.k==='ptt'){
+      if(e.on) TALK.speaking.add(e.pid); else TALK.speaking.delete(e.pid);
+      paintSpeaking();
+      return;
+    }
+    if(e.k==='voice'){
+      if(e.on) TALK.voice.add(e.pid); else TALK.voice.delete(e.pid);
+      voiceSync(); paintDock();
+      return;
+    }
+    if(e.k==='history'){
+      const have = new Set(TALK.log.map(m=>m.id));
+      TALK.log = e.items.filter(m=>!have.has(m.id)).concat(TALK.log).slice(-60);
+      if(TALK.open) paintLog();
+      return;
+    }
+    if(e.k!=='chat' && e.k!=='react') return;
+    TALK.log.push(e);
+    if(TALK.log.length>60) TALK.log.shift();
+    if(e.pid!==ME.id){
+      if(TALK.open) paintLog(); else { TALK.unread++; paintDock(); }
+      blip(e.k==='react');
+    } else if(TALK.open) paintLog();
+    bubble(e);
+    if(e.k==='react') burst(e.emo);
+  }catch(x){ noteErr('rt apply: '+x.message); }
+}
+
+function sendChat(text){
+  text = String(text||'').trim().slice(0,160);
+  if(!text) return;
+  rtSend({k:'chat', text});
+}
+function sendReact(emo){ rtSend({k:'react', emo}); }
+
+/* ---------- the overlay ---------- */
+let LIVE=null, FXSTACK=null;
+function liveRoot(){
+  if(LIVE && LIVE.isConnected) return LIVE;
+  LIVE = document.createElement('div'); LIVE.id='live';
+  document.body.appendChild(LIVE);
+  FXSTACK = document.createElement('div'); FXSTACK.className='fxstack';
+  LIVE.appendChild(FXSTACK);
+  return LIVE;
+}
+
+/* called at the end of every render(): keeps the dock in step with the screen */
+function liveRender(){
+  const on = TALKABLE();
+  document.body.classList.toggle('talk-on', on);
+  if(!on){
+    if(LIVE){ LIVE.remove(); LIVE=null; FXSTACK=null; }
+    TALK.open=false; TALK.tray=false;
+    return;
+  }
+  liveRoot();
+  paintDock();
+  paintSpeaking();
+}
+
+function paintDock(){
+  const root = liveRoot();
+  let d = root.querySelector('.dock');
+  if(!d){
+    d = document.createElement('div'); d.className='dock';
+    d.innerHTML =
+      `<button class="dbtn" id="d-react" aria-label="Send a reaction">😀</button>`+
+      `<button class="dbtn" id="d-chat" aria-label="Open chat"><span>💬</span><span class="badge" hidden></span></button>`+
+      `<button class="ptt" id="d-ptt"><span class="mic">🎙</span><span class="lb">Hold to talk</span></button>`;
+    root.appendChild(d);
+    d.querySelector('#d-react').onclick = ()=>{ TALK.tray=!TALK.tray; TALK.open=false; paintTray(); paintPane(); paintDock(); };
+    d.querySelector('#d-chat').onclick  = ()=>{ TALK.open=!TALK.open; TALK.tray=false; if(TALK.open) TALK.unread=0; paintPane(); paintTray(); paintDock(); };
+    wirePTT(d.querySelector('#d-ptt'));
+  }
+  const mic = TALK.micState;
+  const others = Array.from(TALK.voice).filter(p=>p!==ME.id).length;
+  const label = isLandscape()
+    ? (mic==='denied' ? 'Mic off' : mic==='asking' ? 'Allow…' : TALK.held ? 'On air' : others ? others+' on mic' : 'Talk')
+    : (mic==='denied' ? 'Mic blocked'
+      : mic==='asking' ? 'Allow the mic…'
+      : TALK.held ? 'On air'
+      : others ? 'Hold to talk · '+others+' on mic'
+      : 'Hold to talk');
+  const badge = d.querySelector('.badge');
+  badge.hidden = !TALK.unread;
+  badge.textContent = TALK.unread>9 ? '9+' : String(TALK.unread);
+  d.querySelector('#d-react').setAttribute('aria-expanded', String(TALK.tray));
+  d.querySelector('#d-chat').setAttribute('aria-expanded', String(TALK.open));
+  const ptt = d.querySelector('#d-ptt');
+  ptt.querySelector('.lb').textContent = label;
+  ptt.classList.toggle('live', TALK.held);
+  ptt.classList.toggle('off', mic==='denied');
+}
+
+function paintTray(){
+  const root = liveRoot();
+  const old = root.querySelector('.tray'); if(old) old.remove();
+  if(!TALK.tray) return;
+  const t = document.createElement('div'); t.className='tray';
+  t.innerHTML = `<div class="in">${REACTIONS.map(e=>`<button data-e="${e}">${e}</button>`).join('')}</div>`;
+  t.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    sendReact(b.dataset.e);
+    TALK.tray=false; paintTray(); paintDock();
+  });
+  root.appendChild(t);
+}
+
+function paintPane(){
+  const root = liveRoot();
+  const old = root.querySelector('.chatpane');
+  if(!TALK.open){ if(old) old.remove(); return; }
+  if(old) return;                                  // keep it mounted; only the log repaints
+  const p = document.createElement('div'); p.className='chatpane';
+  p.innerHTML =
+    `<div class="hd"><h3>Table talk</h3><button class="x" id="c-x" aria-label="Close">✕</button></div>`+
+    `<div class="chatlog" id="c-log"></div>`+
+    `<div class="quick">${QUICK.map(q=>`<button>${esc(q)}</button>`).join('')}</div>`+
+    `<form class="chatform" id="c-form" autocomplete="off">`+
+      `<input id="c-in" maxlength="160" placeholder="Say something…" value="${esc(TALK.draft)}">`+
+      `<button type="submit" aria-label="Send">➤</button></form>`;
+  root.appendChild(p);
+
+  p.querySelector('#c-x').onclick = ()=>{ TALK.open=false; paintPane(); paintDock(); };
+  p.querySelectorAll('.quick button').forEach(b=>b.onclick=()=>sendChat(b.textContent));
+  const inp = p.querySelector('#c-in');
+  inp.addEventListener('input', ()=>{ TALK.draft = inp.value; });
+  p.querySelector('#c-form').onsubmit = (ev)=>{
+    ev.preventDefault();
+    sendChat(inp.value);
+    inp.value=''; TALK.draft=''; inp.focus();
+  };
+  paintLog();
+}
+
+function paintLog(){
+  const box = document.getElementById('c-log');
+  if(!box) return;
+  const stick = box.scrollTop + box.clientHeight > box.scrollHeight - 40;
+  if(!TALK.log.length){
+    box.innerHTML = `<div class="none">Nothing said yet.<br>Tap a phrase below, or send a reaction.</div>`;
+    return;
+  }
+  box.innerHTML = TALK.log.map(m=>{
+    const nm = nameOf(m.pid), col = seatColor(m.pid);
+    const body = m.k==='react' ? m.emo : esc(m.text);
+    return `<div class="msg ${m.k==='react'?'emo':''}">`+
+      `<span class="who" style="background:${col}">${esc((nm[0]||'?').toUpperCase())}</span>`+
+      `<div class="bd"><div class="nm">${esc(nm)}${m.pid===ME.id?' · you':''}</div>`+
+      `<div class="tx">${body}</div></div></div>`;
+  }).join('');
+  if(stick) requestAnimationFrame(()=>{ box.scrollTop = box.scrollHeight; });
+}
+
+/* a message shows for a few seconds even with the panel shut, so you
+   never miss one without having to stare at a badge */
+function bubble(e){
+  if(TALK.open) return;
+  liveRoot();
+  const nm = nameOf(e.pid), col = seatColor(e.pid);
+  const d = document.createElement('div');
+  d.className = 'bub ' + (e.k==='react'?'emo':'');
+  d.innerHTML = `<span class="who" style="background:${col}">${esc((nm[0]||'?').toUpperCase())}</span>`+
+    `<span class="tx"><b>${esc(nm)}</b>${e.k==='react'?e.emo:esc(e.text)}</span>`;
+  FXSTACK.appendChild(d);
+  while(FXSTACK.children.length>3) FXSTACK.firstChild.remove();
+  const life = e.k==='react' ? 3200 : 6000;
+  setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(),400); }, life);
+}
+
+function burst(emo){
+  const n = 3;
+  for(let i=0;i<n;i++){
+    const d = document.createElement('div');
+    d.className='burst'; d.textContent=emo;
+    d.style.left = (44 + Math.random()*12) + 'vw';
+    d.style.bottom = (90 + Math.random()*20) + 'px';
+    d.style.setProperty('--rise', (150 + Math.random()*130)+'px');
+    d.style.setProperty('--rot', (Math.random()*44-22)+'deg');
+    d.style.animationDelay = (i*0.11)+'s';
+    document.body.appendChild(d);
+    setTimeout(()=>d.remove(), 1800 + i*120);
+  }
+}
+
+function paintSpeaking(){
+  const pips = document.querySelectorAll('.seatpip');
+  if(!pips.length || !G) return;
+  G.players.forEach((p,i)=>{
+    if(pips[i]) pips[i].classList.toggle('is-talk', TALK.speaking.has(p.id));
+  });
+}
+
+/* a softer cousin of the tile click, so a message is heard without being a thud */
+function blip(high){
+  if(!UI.sound) return;
+  try{
+    AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+    if(AC.state==='suspended') AC.resume();
+    const t=AC.currentTime;
+    const o=AC.createOscillator(), g=AC.createGain();
+    o.type='sine'; o.frequency.setValueAtTime(high?880:620,t);
+    o.frequency.exponentialRampToValueAtTime(high?1320:880,t+.07);
+    g.gain.setValueAtTime(.0001,t);
+    g.gain.exponentialRampToValueAtTime(.12,t+.012);
+    g.gain.exponentialRampToValueAtTime(.0001,t+.19);
+    o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t+.21);
+  }catch(x){}
+}
+
+/* ============================================================
+   Push to talk — a small audio mesh alongside the data star
+   ============================================================ */
+/* The game is host-authoritative, but audio is not worth relaying through
+   one phone, so every pair opens its own WebRTC audio call. The mic track
+   is muted at the source until the button is held: nothing leaves the
+   phone while the button is up. */
+
+function silentStream(){
+  // a live-but-silent track, so a call can be placed before the mic is granted
+  AC = AC || new (window.AudioContext||window.webkitAudioContext)();
+  const dst = AC.createMediaStreamDestination();
+  const osc = AC.createOscillator(), g = AC.createGain();
+  g.gain.value = 0; osc.connect(g); g.connect(dst); osc.start();
+  return dst.stream;
+}
+function outStream(){
+  if(!TALK.out){ try{ TALK.out = silentStream(); }catch(x){ TALK.out = new MediaStream(); } }
+  return TALK.out;
+}
+
+function voiceAttach(peer){
+  try{
+    peer.on('call', mc=>{
+      const pid = (mc.metadata && mc.metadata.id) || mc.peer;
+      try{ mc.answer(outStream()); }catch(x){ noteErr('answer: '+x.message); return; }
+      bindCall(pid, mc);
+    });
+  }catch(x){ noteErr('voice attach: '+x.message); }
+}
+
+function bindCall(pid, mc){
+  const prev = TALK.calls.get(pid);
+  if(prev && prev!==mc){ try{ prev.close(); }catch(x){} }
+  TALK.calls.set(pid, mc);
+  mc.on('stream', s=>playRemote(pid, s));
+  mc.on('close', ()=>{ if(TALK.calls.get(pid)===mc) TALK.calls.delete(pid); dropRemote(pid); });
+  mc.on('error', ()=>{ if(TALK.calls.get(pid)===mc) TALK.calls.delete(pid); });
+}
+
+function playRemote(pid, stream){
+  let a = TALK.audio.get(pid);
+  if(!a){
+    a = document.createElement('audio');
+    a.autoplay = true; a.playsInline = true;
+    a.style.display='none';
+    document.body.appendChild(a);
+    TALK.audio.set(pid, a);
+  }
+  a.srcObject = stream;
+  a.play().catch(()=>{});          // blocked until a gesture on some browsers; a later one frees it
+}
+function dropRemote(pid){
+  const a = TALK.audio.get(pid);
+  if(a){ try{ a.srcObject=null; a.remove(); }catch(x){} TALK.audio.delete(pid); }
+}
+
+/* open any call this phone owes the table. Only the lower player id dials,
+   so a pair never rings each other at the same time. */
+function voiceSync(){
+  try{
+    if(!TALKABLE() || !G.peers || !NET.peer || NET.peer.destroyed) return;
+    TALK.voice.forEach(pid=>{ if(!G.players.some(p=>p.id===pid)) TALK.voice.delete(pid); });
+    if(!TALK.voice.size){ voiceIdle(); return; }   // nobody is on the mic — stay off the air
+    for(const p of G.players){
+      if(p.id===ME.id) continue;
+      const remote = G.peers[p.id];
+      const cur = TALK.calls.get(p.id);
+      if(!remote){ if(cur){ try{cur.close()}catch(x){} TALK.calls.delete(p.id); dropRemote(p.id); } continue; }
+      if(cur && cur.peer===remote) continue;
+      if(cur){ try{cur.close()}catch(x){} TALK.calls.delete(p.id); }
+      if(ME.id < p.id){
+        const mc = NET.peer.call(remote, outStream(), {metadata:{id:ME.id}});
+        if(mc) bindCall(p.id, mc);
+      }
+    }
+    for(const pid of Array.from(TALK.calls.keys())){
+      if(!G.players.some(p=>p.id===pid)){
+        try{ TALK.calls.get(pid).close(); }catch(x){}
+        TALK.calls.delete(pid); dropRemote(pid);
+      }
+    }
+  }catch(x){ noteErr('voice sync: '+x.message); }
+}
+/* drop every call but keep the permission we were granted */
+function voiceIdle(){
+  if(!TALK.calls.size && !TALK.audio.size) return;
+  TALK.calls.forEach(c=>{ try{c.close()}catch(x){} }); TALK.calls.clear();
+  Array.from(TALK.audio.keys()).forEach(dropRemote);
+  TALK.speaking.clear(); paintSpeaking();
+}
+
+function voiceStop(){
+  TALK.calls.forEach(c=>{ try{c.close()}catch(x){} }); TALK.calls.clear();
+  TALK.audio.forEach((a,pid)=>dropRemote(pid));
+  TALK.speaking.clear();
+  if(TALK.micTrack){ try{ TALK.micTrack.stop(); }catch(x){} }
+  TALK.micTrack=null; TALK.out=null; TALK.micState='idle'; TALK.held=false;
+  TALK.voice.clear();
+}
+
+async function micArm(){
+  if(TALK.micState==='on' || TALK.micState==='asking') return TALK.micState==='on';
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+    TALK.micState='denied'; paintDock();
+    toast('This browser will not share a microphone here');
+    return false;
+  }
+  TALK.micState='asking'; paintDock();
+  try{
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:true, noiseSuppression:true, autoGainControl:true}, video:false
+    });
+    const track = s.getAudioTracks()[0];
+    track.enabled = false;                       // silent until the button is held
+    TALK.micTrack = track;
+    TALK.micState = 'on';
+    // swap it into the stream every call already shares
+    const out = outStream();
+    out.getAudioTracks().forEach(t=>{ try{ out.removeTrack(t); t.stop(); }catch(x){} });
+    out.addTrack(track);
+    TALK.calls.forEach(mc=>{
+      try{
+        const pc = mc.peerConnection;
+        if(!pc) return;
+        const sender = pc.getSenders().find(x=>x.track && x.track.kind==='audio');
+        if(sender) sender.replaceTrack(track);
+        else pc.addTrack(track, out);
+      }catch(x){}
+    });
+    TALK.voice.add(ME.id);
+    rtSend({k:'voice', on:true});
+    voiceSync();
+    paintDock();
+    return true;
+  }catch(x){
+    TALK.micState='denied'; paintDock();
+    toast(x && x.name==='NotAllowedError' ? 'Microphone permission was declined' : 'No microphone available');
+    return false;
+  }
+}
+
+function pttOn(){
+  if(TALK.held) return;
+  if(TALK.micState!=='on'){ micArm().then(ok=>{ if(ok && TALK.wantHold) pttOn(); }); return; }
+  TALK.held = true;
+  TALK.micTrack.enabled = true;
+  rtSend({k:'ptt', on:true});
+  paintDock();
+}
+function pttOff(){
+  TALK.wantHold = false;
+  if(!TALK.held) return;
+  TALK.held = false;
+  if(TALK.micTrack) TALK.micTrack.enabled = false;
+  rtSend({k:'ptt', on:false});
+  paintDock();
+}
+
+function wirePTT(btn){
+  if(!btn) return;
+  const down = (ev)=>{
+    ev.preventDefault();
+    TALK.wantHold = true;
+    try{ btn.setPointerCapture && ev.pointerId!=null && btn.setPointerCapture(ev.pointerId); }catch(x){}
+    pttOn();
+  };
+  btn.addEventListener('pointerdown', down);
+  btn.addEventListener('pointerup', pttOff);
+  btn.addEventListener('pointercancel', pttOff);
+  btn.addEventListener('lostpointercapture', pttOff);
+  btn.addEventListener('contextmenu', e=>e.preventDefault());
+  // a keyboard user gets the same thing on the space bar
+  btn.addEventListener('keydown', e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); TALK.wantHold=true; pttOn(); } });
+  btn.addEventListener('keyup',   e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); pttOff(); } });
+}
+// a pointerup that lands anywhere else must still cut the mic
+window.addEventListener('pointerup', ()=>{ if(TALK.held||TALK.wantHold) pttOff(); });
+window.addEventListener('blur', ()=>{ if(TALK.held||TALK.wantHold) pttOff(); });
 
 /* ---------- boot ---------- */
 let SAVED = null;
