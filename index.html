@@ -438,6 +438,7 @@ body.talk-on #app{padding-bottom:84px}
   padding:10px 14px;display:flex;flex-direction:column;gap:8px;
 }
 .msg{display:flex;gap:8px;align-items:flex-start;animation:tin .2s ease}
+.msg.quiet{animation:none}
 .msg .who{
   flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:grid;place-items:center;
   font-size:11px;font-weight:800;color:#0C1714;margin-top:1px;
@@ -1976,6 +1977,19 @@ function paintPane(){
   paintLog();
 }
 
+function msgHTML(m, fresh){
+  const q = fresh ? '' : ' quiet';        // only a message that just arrived slides in
+  if(m.k==='sys') return `<div class="msg sys${q}" data-id="${m.id}"><div class="tx">${esc(m.text)}</div></div>`;
+  const nm = nameOf(m.pid), col = seatColor(m.pid);
+  const body = m.k==='react' ? m.emo : esc(m.text);
+  return `<div class="msg ${m.k==='react'?'emo':''}${q}" data-id="${m.id}">`+
+    `<span class="who" style="background:${col}">${esc((nm[0]||'?').toUpperCase())}</span>`+
+    `<div class="bd"><div class="nm">${esc(nm)}${m.pid===ME.id?' · you':''}</div>`+
+    `<div class="tx">${body}</div></div></div>`;
+}
+
+/* Append what is new instead of rewriting the list. Rebuilding it meant every
+   message on screen replayed its entry animation each time somebody spoke. */
 function paintLog(){
   const box = document.getElementById('c-log');
   if(!box) return;
@@ -1984,15 +1998,20 @@ function paintLog(){
     box.innerHTML = `<div class="none">Nothing said yet.<br>Tap a phrase below, or send a reaction.</div>`;
     return;
   }
-  box.innerHTML = TALK.log.map(m=>{
-    if(m.k==='sys') return `<div class="msg sys"><div class="tx">${esc(m.text)}</div></div>`;
-    const nm = nameOf(m.pid), col = seatColor(m.pid);
-    const body = m.k==='react' ? m.emo : esc(m.text);
-    return `<div class="msg ${m.k==='react'?'emo':''}">`+
-      `<span class="who" style="background:${col}">${esc((nm[0]||'?').toUpperCase())}</span>`+
-      `<div class="bd"><div class="nm">${esc(nm)}${m.pid===ME.id?' · you':''}</div>`+
-      `<div class="tx">${body}</div></div></div>`;
-  }).join('');
+  for(const m of TALK.log) if(!m.id) m.id = uid();
+
+  const shown = Array.from(box.querySelectorAll('.msg')).map(n=>n.dataset.id);
+  const ids = TALK.log.map(m=>m.id);
+  // the messages on screen are still the start of the log -> the rest is simply new
+  const isPrefix = shown.length<=ids.length && shown.every((id,i)=>id===ids[i]);
+
+  if(!isPrefix){
+    box.innerHTML = TALK.log.map(m=>msgHTML(m,false)).join('');   // history arrived, or a reset
+  } else if(shown.length<ids.length){
+    box.querySelectorAll('.none').forEach(n=>n.remove());
+    box.insertAdjacentHTML('beforeend',
+      TALK.log.slice(shown.length).map(m=>msgHTML(m,true)).join(''));
+  }
   if(stick) requestAnimationFrame(()=>{ box.scrollTop = box.scrollHeight; });
 }
 
