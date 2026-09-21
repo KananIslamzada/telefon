@@ -479,7 +479,9 @@ body.talk-on #app{padding-bottom:84px}
   position:fixed;left:0;right:0;bottom:calc(72px + env(safe-area-inset-bottom));z-index:56;
   max-width:520px;margin:0 auto;padding:0 14px;pointer-events:none;
   display:flex;flex-direction:column;align-items:flex-end;gap:6px;
+  max-height:32vh;overflow:hidden;
 }
+.fxstack .bub{max-width:min(74%,330px)}
 .bub{
   max-width:86%;display:flex;gap:7px;align-items:center;text-align:left;
   padding:8px 13px 8px 9px;border-radius:999px;
@@ -497,6 +499,23 @@ body.talk-on #app{padding-bottom:84px}
 .bub .tx{font-size:14px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
 .bub .tx b{font-weight:600;color:var(--ink-45);font-size:12px;margin-right:5px}
 .bub.emo .tx{font-size:22px}
+/* a reaction lands on the player's own seat pip, well clear of the hand */
+.rchip{
+  position:fixed;z-index:58;pointer-events:none;
+  min-width:27px;height:27px;padding:0 5px;border-radius:999px;
+  display:grid;place-items:center;font-size:15px;line-height:1;
+  background:#101F1A;border:1px solid var(--ink-20);
+  box-shadow:0 5px 14px rgba(0,0,0,.55);
+  animation:rchip 2.3s cubic-bezier(.2,.9,.3,1.15) forwards;
+}
+@keyframes rchip{
+  0%{opacity:0;transform:scale(.4) translateY(8px)}
+  13%{opacity:1;transform:scale(1.15) translateY(0)}
+  24%{transform:scale(1)}
+  78%{opacity:1;transform:scale(1)}
+  100%{opacity:0;transform:scale(.9) translateY(-8px)}
+}
+
 .bub.sys{padding:7px 14px}
 .bub.sys .tx{font-size:12.5px;font-weight:600;color:var(--ink-70)}
 .bub.typing{opacity:.86}
@@ -511,7 +530,7 @@ body.talk-on #app{padding-bottom:84px}
 
 /* a reaction also throws the emoji up the screen */
 .burst{
-  position:fixed;z-index:59;font-size:38px;pointer-events:none;
+  position:fixed;z-index:56;font-size:38px;pointer-events:none;
   animation:burst 1.5s cubic-bezier(.22,.7,.3,1) forwards;
   text-shadow:0 4px 18px rgba(0,0,0,.55);
 }
@@ -1856,8 +1875,13 @@ function rtApply(e){
       if(TALK.open) paintLog(); else { TALK.unread++; paintDock(); }
       blip(e.k==='react');
     } else if(TALK.open) paintLog();
-    bubble(e);
-    if(e.k==='react') burst(e.emo, e.pid);
+    if(e.k==='react'){
+      burst(e.emo, e.pid);
+      // only fall back to the stack when there is no seat to put it on (the lobby)
+      if(!reactChip(e.pid, e.emo)) bubble(e);
+    } else {
+      bubble(e);
+    }
   }catch(x){ noteErr('rt apply: '+x.message); }
 }
 
@@ -2032,9 +2056,31 @@ function bubble(e){
   }
   FXSTACK.insertBefore(d, FXSTACK.querySelector('.bub.typing'));
   const msgs = FXSTACK.querySelectorAll('.bub:not(.typing)');
-  for(let i=0;i<msgs.length-3;i++) msgs[i].remove();
+  for(let i=0;i<msgs.length-2;i++) msgs[i].remove();
   const life = e.k==='react' ? 3200 : e.k==='sys' ? 4200 : 6000;
   setTimeout(()=>{ d.classList.add('out'); setTimeout(()=>d.remove(),400); }, life);
+}
+
+/* pin a reaction to the sender's seat for a moment. Returns false when there
+   is no seat strip on screen, so the caller can fall back to the bubble stack. */
+function reactChip(pid, emo){
+  if(!G) return false;
+  const seat = G.players.findIndex(p=>p.id===pid);
+  const pips = document.querySelectorAll('.seatpip');
+  if(seat<0 || !pips[seat]) return false;
+  const r = pips[seat].getBoundingClientRect();
+  if(!r.width) return false;
+  const root = liveRoot();
+  Array.from(root.querySelectorAll('.rchip'))
+    .filter(n=>n.dataset.pid===pid)
+    .forEach(n=>n.remove());                 // one marker per player at a time
+  const d = document.createElement('div');
+  d.className='rchip'; d.dataset.pid=pid; d.textContent=emo;
+  d.style.left = Math.max(4, Math.min(innerWidth-34, r.right-21)) + 'px';
+  d.style.top  = Math.max(2, r.top-11) + 'px';
+  root.appendChild(d);
+  setTimeout(()=>d.remove(), 2400);
+  return true;
 }
 
 function burst(emo, pid){
@@ -2049,7 +2095,7 @@ function burst(emo, pid){
     const dk = document.querySelector('.dock');
     if(dk){ const r=dk.getBoundingClientRect(); ox = r.left + r.width/2; oy = r.top - 10; }
   }
-  const n = 3;
+  const n = 2;
   for(let i=0;i<n;i++){
     const d = document.createElement('div');
     d.className='burst'; d.textContent=emo;
