@@ -967,6 +967,12 @@ setInterval(()=>{
   if(NET.peer.disconnected) hostWake();
 }, 2500);
 
+/* a destroyed peer never fires anything again, so nothing else would notice */
+setInterval(()=>{
+  if(NET.role!=='host' || !G) return;
+  if(!NET.peer || NET.peer.destroyed){ NET.status='reconnecting'; hostRevive(null); }
+}, 3000);
+
 /* A data channel can die without ever firing `close` — a phone that slept on
    mobile data just stops answering. Ping every guest and drop the ones that
    have gone quiet, so `away` on the seat strip means something. */
@@ -994,6 +1000,28 @@ setInterval(()=>{
   }
   voiceSync();                 // heal any call that failed to place
 }, PING_EVERY);
+
+/* Get a live table back on the broker. A disconnected peer can simply
+   reconnect; a destroyed one has to be rebuilt on the same code, which the
+   guests are already dialling every few seconds. */
+let REVIVE = null;
+function hostRevive(peer){
+  if(NET.role!=='host' || !G) return;
+  clearTimeout(REVIVE);
+  if(peer && !peer.destroyed){
+    try{ peer.reconnect(); }catch(e){ noteErr('revive: '+e.message); }
+    REVIVE = setTimeout(()=>{                    // still not back? rebuild it
+      if(NET.role==='host' && G && NET.status!=='ready') hostRevive(null);
+    }, 6000);
+    return;
+  }
+  try{ if(NET.peer) NET.peer.destroy(); }catch(e){}
+  NET.conns.clear(); NET.seen.clear();           // those channels died with the peer
+  const code = G.code, keep = G;
+  REVIVE = setTimeout(()=>{
+    if(NET.role==='host' && G) hostRoom(0, code, keep);
+  }, 1200);
+}
 
 function hostWake(){
   const peer=NET.peer;
@@ -1029,6 +1057,14 @@ function hostRoom(tries, fixedCode, restore){
       setTimeout(()=>hostRoom(tries+1, fixedCode, restore), fixedCode ? 2000 : 0);
       return;
     }
+    /* The table is already up. Switching to WhatsApp to send the code freezes
+       this tab, the broker socket dies and PeerJS reports it here — which is
+       no reason to throw the table away. Hold the room and get back on. */
+    if(G && NET.role==='host'){
+      NET.status='reconnecting'; render();
+      hostRevive(peer);
+      return;
+    }
     try{ peer.destroy(); }catch(x){}          // otherwise PeerJS keeps retrying and spams errors
     NET.peer=null; NET.role='idle'; NET.status=''; G=null;
     UI.err = explainPeerError(e);
@@ -1061,6 +1097,8 @@ function hostRoom(tries, fixedCode, restore){
       try{
         conn.send({t:'rt', e:{k:'history', items:TALK.log.slice(-25)}});
         TALK.voice.forEach(vp=>conn.send({t:'rt', e:{k:'voice', on:true, pid:vp}}));
+        // the mic latches, so somebody may have been on air since before they arrived
+        TALK.speaking.forEach(sp=>conn.send({t:'rt', e:{k:'ptt', on:true, pid:sp}}));
       }catch(e){}
     });
     conn.on('data', m=>{
@@ -1499,7 +1537,8 @@ function setMode(m){
   G.mode=m; G.scores=new Array(sideCount(G)).fill(0); sync();
 }
 function leave(){
-  clearTimeout(RETRY); RETRY=null; clearTimeout(NET.joinTimer);
+  clearTimeout(RETRY); RETRY=null; clearTimeout(REVIVE); REVIVE=null;
+  clearTimeout(NET.joinTimer);
   voiceStop();
   TALK.log.length=0; TALK.unread=0; TALK.open=false; TALK.tray=false; TALK.draft='';
   NET.joined=false; NET.seen.clear(); NET.hostSeen=0;
@@ -1790,7 +1829,7 @@ const TALK = {
   typing:new Map(),               // pid -> timer that clears a stale indicator
   tick:null, tickT:null,          // the line currently running across the masthead
   mine:false, myTypeStop:null,    // whether we have told the table we are typing
-  calls:new Map(), audio:new Map(), held:false
+  calls:new Map(), audio:new Map(), live:false   // live = the mic is open
 };
 
 const TALKABLE = ()=> !!G && !LOCAL && (NET.role==='host' || NET.role==='guest');
@@ -1930,7 +1969,7 @@ function paintDock(){
     d.innerHTML =
       `<button class="dbtn" id="d-react" aria-label="Send a reaction">😀</button>`+
       `<button class="dbtn" id="d-chat" aria-label="Open chat"><span>💬</span><span class="badge" hidden></span></button>`+
-      `<button class="ptt" id="d-ptt"><span class="mic">🎙</span><span class="lb">Hold to talk</span></button>`;
+      `<button class="ptt" id="d-ptt" aria-pressed="false"><span class="mic">🎙</span><span class="lb">Tap to talk</span></button>`;
     root.appendChild(d);
     d.querySelector('#d-react').onclick = ()=>{ TALK.tray=!TALK.tray; TALK.open=false; paintTray(); paintPane(); paintDock(); };
   d.querySelector('#d-chat').onclick  = ()=>{ TALK.open=!TALK.open; TALK.tray=false;
@@ -1941,12 +1980,12 @@ function paintDock(){
   const mic = TALK.micState;
   const others = Array.from(TALK.voice).filter(p=>p!==ME.id).length;
   const label = isLandscape()
-    ? (mic==='denied' ? 'Mic off' : mic==='asking' ? 'Allow…' : TALK.held ? 'On air' : others ? others+' on mic' : 'Talk')
+    ? (mic==='denied' ? 'Mic off' : mic==='asking' ? 'Allow…' : TALK.live ? 'On air' : others ? others+' on mic' : 'Talk')
     : (mic==='denied' ? 'Mic blocked'
       : mic==='asking' ? 'Allow the mic…'
-      : TALK.held ? 'On air'
-      : others ? 'Hold to talk · '+others+' on mic'
-      : 'Hold to talk');
+      : TALK.live ? 'On air · tap to mute'
+      : others ? 'Tap to talk · '+others+' on mic'
+      : 'Tap to talk');
   const badge = d.querySelector('.badge');
   badge.hidden = !TALK.unread;
   badge.textContent = TALK.unread>9 ? '9+' : String(TALK.unread);
@@ -1954,8 +1993,10 @@ function paintDock(){
   d.querySelector('#d-chat').setAttribute('aria-expanded', String(TALK.open));
   const ptt = d.querySelector('#d-ptt');
   ptt.querySelector('.lb').textContent = label;
-  ptt.classList.toggle('live', TALK.held);
+  ptt.classList.toggle('live', TALK.live);
   ptt.classList.toggle('off', mic==='denied');
+  ptt.setAttribute('aria-pressed', String(TALK.live));
+  ptt.querySelector('.mic').textContent = TALK.live ? '🔴' : '🎙';
 }
 
 function paintTray(){
@@ -2276,7 +2317,7 @@ function voiceStop(){
   TALK.audio.forEach((a,pid)=>dropRemote(pid));
   TALK.speaking.clear();
   if(TALK.micTrack){ try{ TALK.micTrack.stop(); }catch(x){} }
-  TALK.micTrack=null; TALK.out=null; TALK.micState='idle'; TALK.held=false;
+  TALK.micTrack=null; TALK.out=null; TALK.micState='idle'; TALK.live=false;
   TALK.voice.clear();
 }
 
@@ -2321,18 +2362,22 @@ async function micArm(){
   }
 }
 
+/* The mic latches: one tap opens it, another shuts it. Holding a button down
+   while also playing tiles on a phone asks for a third hand. */
+function pttToggle(){
+  if(TALK.live) pttOff(); else pttOn();
+}
 function pttOn(){
-  if(TALK.held) return;
-  if(TALK.micState!=='on'){ micArm().then(ok=>{ if(ok && TALK.wantHold) pttOn(); }); return; }
-  TALK.held = true;
+  if(TALK.live) return;
+  if(TALK.micState!=='on'){ micArm().then(ok=>{ if(ok) pttOn(); }); return; }
+  TALK.live = true;
   TALK.micTrack.enabled = true;
   rtSend({k:'ptt', on:true});
   paintDock();
 }
 function pttOff(){
-  TALK.wantHold = false;
-  if(!TALK.held) return;
-  TALK.held = false;
+  if(!TALK.live) return;
+  TALK.live = false;
   if(TALK.micTrack) TALK.micTrack.enabled = false;
   rtSend({k:'ptt', on:false});
   paintDock();
@@ -2340,24 +2385,10 @@ function pttOff(){
 
 function wirePTT(btn){
   if(!btn) return;
-  const down = (ev)=>{
-    ev.preventDefault();
-    TALK.wantHold = true;
-    try{ btn.setPointerCapture && ev.pointerId!=null && btn.setPointerCapture(ev.pointerId); }catch(x){}
-    pttOn();
-  };
-  btn.addEventListener('pointerdown', down);
-  btn.addEventListener('pointerup', pttOff);
-  btn.addEventListener('pointercancel', pttOff);
-  btn.addEventListener('lostpointercapture', pttOff);
+  // click covers tap, mouse and the space bar, so the button needs nothing else
+  btn.addEventListener('click', e=>{ e.preventDefault(); pttToggle(); });
   btn.addEventListener('contextmenu', e=>e.preventDefault());
-  // a keyboard user gets the same thing on the space bar
-  btn.addEventListener('keydown', e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); TALK.wantHold=true; pttOn(); } });
-  btn.addEventListener('keyup',   e=>{ if(e.key===' '||e.key==='Enter'){ e.preventDefault(); pttOff(); } });
 }
-// a pointerup that lands anywhere else must still cut the mic
-window.addEventListener('pointerup', ()=>{ if(TALK.held||TALK.wantHold) pttOff(); });
-window.addEventListener('blur', ()=>{ if(TALK.held||TALK.wantHold) pttOff(); });
 
 /* ---------- boot ---------- */
 let SAVED = null;
