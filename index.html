@@ -1064,7 +1064,16 @@ function hostRoom(tries, fixedCode, restore){
       hostRevive(peer);
       return;
     }
+    /* No table yet, so hostRevive above did not apply: the broker itself refused
+       or dropped the socket. It is a free shared service that does this under load,
+       so back off and try again before giving up on the whole table. */
+    const transient = ['network','server-error','socket-error','socket-closed'].includes(e.type);
     try{ peer.destroy(); }catch(x){}          // otherwise PeerJS keeps retrying and spams errors
+    if(transient && tries<4){
+      NET.peer=null; NET.status='connecting'; render();
+      setTimeout(()=>hostRoom(tries+1, fixedCode, restore), 1200*(tries+1));
+      return;
+    }
     NET.peer=null; NET.role='idle'; NET.status=''; G=null;
     UI.err = explainPeerError(e);
     render();
@@ -1444,6 +1453,9 @@ function joinRoom(){
     noteErr('peer: '+e.type+' — '+(e.message||''));
     if(NET.joined){ guestRetry(code); return; }
     if(e.type==='peer-unavailable') fail('No open table with code '+code+'.');
+    else if(['network','server-error','socket-error','socket-closed'].includes(e.type)){
+      guestRetry(code);                       // broker hiccup — keep trying, the join timer still guards
+    }
     else fail(explainPeerError(e));
   });
   peer.on('disconnected', ()=>{ if(NET.joined){ NET.status='reconnecting'; render(); guestRetry(code); } });
